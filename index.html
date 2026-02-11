@@ -422,8 +422,9 @@ GLOBAL SCENE SETTINGS (optional — put in a "_global" key):
 
 DESIGN GUIDELINES:
 1. Return ONLY valid JSON. No markdown, no explanation, no backticks, no text.
-2. Use EXACTLY 1 entity per design. Pick the SINGLE BEST entity that captures the prompt. NO combos.
-3. Put ALL the visual impact into that one entity — use high particle count (25-50), great colors, right speed/size/shape.
+2. ALWAYS use the "flames" entity. NEVER use bubbles, snow, fireworks, butterfly, sparkle, vortex, dryice, or meteor. Only "flames".
+3. Put ALL the visual impact into flames — use high particle count (25-50), great colors, right speed/size/shape.
+   IMPORTANT: When using custom shapes ("ops"), ALWAYS set "size":1.8-2.5 so the shape is large enough to be recognizable. Small particles make custom shapes invisible.
 4. Set "_global" to enhance the mood (e.g. dreamy=slow movement, intense=high density+glow).
 5. COLORS ARE CRITICAL — they must match the REAL-WORLD object the user described:
    - ALWAYS ask yourself: "What color IS this thing in real life?" and use THAT.
@@ -483,7 +484,7 @@ EXAMPLES:
           },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 500,
+            max_tokens: 1024,
             system: SYS_PROMPT,
             messages: [{
               role: 'user',
@@ -511,7 +512,30 @@ EXAMPLES:
         const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
         if (jsonMatch) jsonStr = jsonMatch[0];
 
-        const config = JSON.parse(jsonStr);
+        // Try parsing, and if truncated, attempt to repair by closing brackets
+        let config;
+        try {
+          config = JSON.parse(jsonStr);
+        } catch(parseErr) {
+          // Likely truncated — try closing all open brackets/braces
+          let repaired = jsonStr;
+          // Remove trailing partial tokens (cut-off strings, numbers, keys)
+          repaired = repaired.replace(/,\s*$/, '');
+          repaired = repaired.replace(/,\s*"[^"]*$/, '');
+          repaired = repaired.replace(/"[^"]*$/, '"');
+          // Count open vs close brackets and add missing closers
+          const opens = (s,c)=>(s.match(new RegExp('\\'+c,'g'))||[]).length;
+          let ob=opens(repaired,'[')-opens(repaired,']');
+          let oc=opens(repaired,'{')-opens(repaired,'}');
+          while(ob-->0) repaired+=']';
+          while(oc-->0) repaired+='}';
+          try {
+            config = JSON.parse(repaired);
+            console.log('[Aura] Repaired truncated JSON');
+          } catch(_) {
+            throw parseErr; // repair failed, throw original error
+          }
+        }
 
         // Apply global scene settings
         if(config._global) {
@@ -708,7 +732,7 @@ EXAMPLES:
 
     // ── Freeform shape renderer (AI sends drawing ops) ──
     function drawFreeformShape(ctx, cx, cy, params){
-      const R=48, soft=max(0,min(1,params.soft||.4));
+      const R=58, soft=max(0,min(1,params.soft||.4));
       const ops=params.ops;
 
       ctx.save();
@@ -776,12 +800,12 @@ EXAMPLES:
 
       // Soft-edge mask: radial fade using destination-in
       ctx.globalCompositeOperation='destination-in';
-      const edge=max(.3,.7-soft*.4);
-      const eg=ctx.createRadialGradient(0,0,0,0,0,R*1.15);
+      const edge=max(.5,.85-soft*.35);
+      const eg=ctx.createRadialGradient(0,0,0,0,0,R*1.08);
       eg.addColorStop(0,'rgba(255,255,255,1)');
       eg.addColorStop(edge,'rgba(255,255,255,1)');
       eg.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,0,R*1.15,0,TAU);ctx.fill();
+      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,0,R*1.08,0,TAU);ctx.fill();
 
       ctx.globalCompositeOperation='source-over';
       ctx.restore();
@@ -944,26 +968,53 @@ EXAMPLES:
 
     const Beh={
 
-      // ═══ 🔥 FLAMES — fast UP, smoky, hot ══════════
-      // Motion: STRONG upward. Wide base → narrow top.
-      // Very different from bubbles (flames are fast/turbulent, bubbles are slow/round).
+      // ═══ 🔥 FLAMES — energetic aura ══════════════════
+      // Radiates outward from character body, rises with crackling energy.
+      // Works with plain smoke textures AND custom AI shapes.
       flames:{
         init(p){
-          p.x=CX+(random()-.5)*120; p.y=CY+35+random()*40;
-          p.vy=-(90+random()*80); p.vx=(random()-.5)*15;
-          p.maxLife=1.4+random()*1.3; p.phase=random()*TAU;
-          p.scaleMax=.2+random()*.4; p.rotSpd=(random()-.5)*2; p.noX=random()*100;
+          // Spawn hugging the character silhouette (oval ring)
+          const ang=random()*TAU;
+          const dist=30+random()*45;
+          p.x=CX+cos(ang)*dist;
+          p.y=CY+sin(ang)*dist*.55;
+          // Bias upward + slight outward push from center
+          const outX=(p.x-CX)*.4;
+          p.vx=outX+(random()-.5)*18;
+          p.vy=-(120+random()*100);
+          p.maxLife=.8+random()*.9; p.phase=random()*TAU;
+          p.scaleMax=.15+random()*.3; p.rotSpd=(random()-.5)*4.5;
+          p.noX=random()*100; p.noY=random()*100;
+          // Store spawn angle for directional energy
+          p.startR=dist; p.angle=ang;
         },
         update(p,dt,el,sp){
           sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
-          p.vy-=50*sp*dt; p.y+=p.vy*sp*dt; p.x+=p.vx*sp*dt;
-          // Turbulent wobble — gets wider at top
-          p.x+=sin(el*3+p.phase)*(15+40*t)*dt;
-          p.x+=(noise2D(el*.6+p.noX,p.life*.5)-.5)*30*dt;
-          // Converge toward center
-          p.x+=(CX-p.x)*.2*t*dt;
-          p.sprite.scale.set(max(.01,(1-t*.5)*p.scaleMax*(.9+.15*hb)));
-          p.sprite.alpha=aS(t,.08,.22)*(.45+.25*hb)*(1-t*.8);
+
+          // Strong upward acceleration + outward drift
+          p.vy-=80*sp*dt;
+          p.y+=p.vy*sp*dt;
+          p.x+=p.vx*sp*dt;
+
+          // Rapid energetic flicker — high frequency for crackling feel
+          const flicker=sin(el*8+p.phase)*sin(el*13+p.noX);
+          p.x+=flicker*18*dt;
+          p.x+=(noise2D(el*1.2+p.noX,p.life*.7)-.5)*20*dt;
+          // Slight upward wobble too
+          p.y+=(noise2D(p.noY,el*.9+p.life*.5)-.5)*10*dt;
+
+          // SCALE: snap in fast, pulse while alive, shrink at end
+          const snapIn=min(t*8,1); // almost instant appear
+          const energyPulse=1+.15*sin(el*10+p.phase)+.08*sin(el*17+p.noX);
+          const fadeScale=1-pow(t,.6)*.55;
+          p.sprite.scale.set(max(.01,snapIn*fadeScale*p.scaleMax*energyPulse));
+
+          // ALPHA: bright core, rapid shimmer, fade as it rises
+          const shimmer=.85+.15*sin(el*12+p.phase*2);
+          const alphaIn=min(t*10,1);
+          const alphaOut=1-pow(t,1.5)*.9;
+          p.sprite.alpha=alphaIn*alphaOut*shimmer*(.4+.25*hb);
+
           p.sprite.tint=p.cS;
           p.sprite.rotation+=p.rotSpd*dt;
         }
