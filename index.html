@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aura Generator — Test Panel</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--ar:120;--ag:80;--ab:220}
+    body{
+      min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
+      gap:24px;background:#1a1a24;padding:20px;flex-wrap:wrap;
+      font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#ccc;
+    }
+    #stage{position:relative;width:520px;flex-shrink:0}
+    #pixi-wrap{
+      width:520px;height:500px;border-radius:16px;overflow:hidden;background:#1c1c28;
+      box-shadow:0 0 50px -12px rgba(var(--ar),var(--ag),var(--ab),.12);
+      transition:box-shadow 1.2s;
+    }
+    #pixi-wrap canvas{width:100%!important;height:100%!important;display:block}
+    #fps{position:absolute;top:8px;right:12px;font:.58rem/1 'SF Mono',monospace;opacity:.2}
+    #loading{
+      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      background:#1c1c28;border-radius:16px;font-size:.8rem;opacity:.5;z-index:5;transition:opacity .4s;
+    }
+    #loading.hidden{opacity:0;pointer-events:none}
+    #error-msg{display:none;color:#f66;text-align:center;padding:1rem;font-size:.85rem}
+
+    #panel{width:310px;display:flex;flex-direction:column;gap:10px;max-height:95vh;overflow-y:auto;padding-right:4px}
+    #panel::-webkit-scrollbar{width:3px}
+    #panel::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
+
+    .card{
+      background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);
+      border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;
+    }
+    .card-head{display:flex;align-items:center;justify-content:space-between}
+    .card-title{font-size:.8rem;font-weight:600;letter-spacing:.02em}
+    .card-val{font:.68rem/1 'SF Mono',monospace;opacity:.4;min-width:28px;text-align:right}
+
+    input[type="range"]{
+      width:100%;height:5px;appearance:none;-webkit-appearance:none;
+      background:rgba(255,255,255,.07);border-radius:5px;outline:none;
+    }
+    input[type="range"]::-webkit-slider-thumb{
+      -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+      background:rgba(255,255,255,.55);cursor:pointer;border:2px solid rgba(255,255,255,.12);
+    }
+    input[type="range"]::-webkit-slider-thumb:hover{background:rgba(255,255,255,.8)}
+
+    .color-row{display:flex;gap:10px;align-items:center}
+    .color-row label{font-size:.65rem;opacity:.35}
+    .color-row input[type="color"]{
+      width:34px;height:26px;border:1px solid rgba(255,255,255,.08);border-radius:7px;
+      background:transparent;cursor:pointer;padding:0;appearance:none;-webkit-appearance:none;
+    }
+    .color-row input[type="color"]::-webkit-color-swatch-wrapper{padding:2px}
+    .color-row input[type="color"]::-webkit-color-swatch{border-radius:4px;border:none}
+
+    .presets{display:none;flex-wrap:wrap;gap:6px;padding:0 0 4px}
+    .preset-btn{
+      padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.04);color:#ddd;font-size:.72rem;cursor:pointer;
+      transition:background .2s,border-color .2s;white-space:nowrap;
+    }
+    .preset-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.15)}
+    .preset-btn.active{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2)}
+
+    .dir-tag{font-size:.55rem;opacity:.25;margin-left:6px;font-weight:400}
+
+    .prompt-card{
+      background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);
+      border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;
+    }
+    .prompt-card .card-title{margin-bottom:2px}
+    .prompt-row{display:flex;gap:8px}
+    .prompt-row input{
+      flex:1;padding:8px 12px;border-radius:10px;
+      border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);
+      color:#f0f0f0;font-size:.85rem;outline:none;
+      transition:border-color .3s,box-shadow .3s;
+    }
+    .prompt-row input::placeholder{color:rgba(255,255,255,.2)}
+    .prompt-row input:focus{border-color:rgba(var(--ar),var(--ag),var(--ab),.3);box-shadow:0 0 20px -6px rgba(var(--ar),var(--ag),var(--ab),.25)}
+    .gen-btn{
+      padding:8px 16px;border-radius:10px;border:none;
+      background:rgba(255,255,255,.12);color:#fff;font-size:.78rem;font-weight:600;
+      cursor:pointer;transition:background .2s;white-space:nowrap;
+    }
+    .gen-btn:hover{background:rgba(255,255,255,.2)}
+    .gen-btn:disabled{opacity:.4;cursor:default}
+    .gen-btn.loading{animation:gen-pulse .8s ease-in-out infinite alternate}
+    @keyframes gen-pulse{0%{opacity:.4}100%{opacity:.8}}
+    .gen-status{font-size:.6rem;opacity:.3;text-align:center;min-height:14px}
+    .gen-status.error{color:#ff6666;opacity:.7}
+
+    @media(max-width:880px){
+      body{flex-direction:column;align-items:center}
+      #stage{width:min(100%,520px)}
+      #pixi-wrap{width:100%;height:auto;aspect-ratio:520/500}
+      #panel{width:min(100%,380px)}
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="pixi-wrap"><div id="loading">Initializing…</div></div>
+    <div id="fps">-- FPS</div>
+    <div id="error-msg">WebGL not available.</div>
+  </div>
+
+  <div id="panel">
+    <div class="prompt-card">
+      <div class="card-title">✍️ Describe your aura</div>
+      <div class="prompt-row">
+        <input type="text" id="prompt-input" placeholder="racing car, ice dragon, fairy princess…" autocomplete="off" spellcheck="false"/>
+        <button class="gen-btn" id="gen-btn">Generate</button>
+      </div>
+      <div class="gen-status" id="gen-status"></div>
+    </div>
+    <div class="presets">
+      <button class="preset-btn" data-preset="racingcar">🏎️ Racing Car</button>
+      <button class="preset-btn" data-preset="sakura">🌸 Sakura</button>
+      <button class="preset-btn" data-preset="fireworkshow">🎆 Fireworks</button>
+      <button class="preset-btn" data-preset="underwater">🌊 Underwater</button>
+      <button class="preset-btn" data-preset="wizard">🧙 Wizard</button>
+      <button class="preset-btn" data-preset="party">🎉 Party</button>
+      <button class="preset-btn" data-preset="frozen">❄️ Frozen</button>
+      <button class="preset-btn" data-preset="dragon">🐉 Dragon</button>
+      <button class="preset-btn" data-preset="fairy">🧚 Fairy</button>
+      <button class="preset-btn" data-preset="superhero">💥 Superhero</button>
+      <button class="preset-btn" data-preset="spooky">👻 Spooky</button>
+      <button class="preset-btn" data-preset="meteorshower">☄️ Meteor Shower</button>
+      <button class="preset-btn" data-preset="thunderstorm">⛈️ Thunderstorm</button>
+      <button class="preset-btn" data-preset="reset">🔄 Reset</button>
+    </div>
+
+    <!-- 8 distinct entities — each has a unique, unmistakable motion -->
+    <div class="card">
+      <div class="card-head"><span class="card-title">🔥 Flames <span class="dir-tag">↑ UP</span></span><span class="card-val" id="v-flames">15</span></div>
+      <input type="range" id="s-flames" min="0" max="60" value="15"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-flames" value="#ff4400"/><label>To</label><input type="color" id="cE-flames" value="#ffcc00"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🫧 Bubbles <span class="dir-tag">↑ FLOAT</span></span><span class="card-val" id="v-bubbles">0</span></div>
+      <input type="range" id="s-bubbles" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-bubbles" value="#44bbff"/><label>To</label><input type="color" id="cE-bubbles" value="#88ffee"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">❄️ Snow <span class="dir-tag">↓ FALL</span></span><span class="card-val" id="v-snow">0</span></div>
+      <input type="range" id="s-snow" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-snow" value="#aaddff"/><label>To</label><input type="color" id="cE-snow" value="#ffffff"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🎆 Fireworks <span class="dir-tag">✦ BURST</span></span><span class="card-val" id="v-fireworks">0</span></div>
+      <input type="range" id="s-fireworks" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-fireworks" value="#ff44aa"/><label>To</label><input type="color" id="cE-fireworks" value="#44ff88"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🦋 Butterflies <span class="dir-tag">~ WANDER</span></span><span class="card-val" id="v-butterfly">0</span></div>
+      <input type="range" id="s-butterfly" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-butterfly" value="#ff88dd"/><label>To</label><input type="color" id="cE-butterfly" value="#88ddff"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">✨ Sparkle Trail <span class="dir-tag">↻ ORBIT</span></span><span class="card-val" id="v-sparkle">0</span></div>
+      <input type="range" id="s-sparkle" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-sparkle" value="#cc88ff"/><label>To</label><input type="color" id="cE-sparkle" value="#88ffcc"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🌀 Vortex <span class="dir-tag">↻→⊙ SPIRAL</span></span><span class="card-val" id="v-vortex">0</span></div>
+      <input type="range" id="s-vortex" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-vortex" value="#7744ee"/><label>To</label><input type="color" id="cE-vortex" value="#22ddff"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">🌫️ Dry Ice <span class="dir-tag">← → GROUND</span></span><span class="card-val" id="v-dryice">0</span></div>
+      <input type="range" id="s-dryice" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-dryice" value="#8899bb"/><label>To</label><input type="color" id="cE-dryice" value="#ccddee"/></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><span class="card-title">☄️ Meteor <span class="dir-tag">↘ STREAK</span></span><span class="card-val" id="v-meteor">0</span></div>
+      <input type="range" id="s-meteor" min="0" max="60" value="0"/>
+      <div class="color-row"><label>From</label><input type="color" id="cS-meteor" value="#ff8844"/><label>To</label><input type="color" id="cE-meteor" value="#ffdd88"/></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js" crossorigin="anonymous"
+    onerror="document.getElementById('error-msg').style.display='block';document.getElementById('loading').style.display='none';"></script>
+  <script>
+  (async function(){
+    'use strict';
+    const{sin,cos,sqrt,abs,floor,round,min,max,PI,exp,random,pow}=Math,TAU=PI*2;
+
+    // ═══════════════════════════════════════════════════
+    // STATE — 8 distinct entities
+    // ═══════════════════════════════════════════════════
+    const ENT=['flames','bubbles','snow','fireworks','butterfly','sparkle','vortex','dryice','meteor'];
+    const S={};
+    const DEFAULTS={
+      flames:   {n:15, cS:0xFF4400, cE:0xFFCC00},
+      bubbles:  {n:0,  cS:0x44BBFF, cE:0x88FFEE},
+      snow:     {n:0,  cS:0xAADDFF, cE:0xFFFFFF},
+      fireworks:{n:0,  cS:0xFF44AA, cE:0x44FF88},
+      butterfly:{n:0,  cS:0xFF88DD, cE:0x88DDFF},
+      sparkle:  {n:0,  cS:0xCC88FF, cE:0x88FFCC},
+      vortex:   {n:0,  cS:0x7744EE, cE:0x22DDFF},
+      dryice:   {n:0,  cS:0x8899BB, cE:0xCCDDEE},
+      meteor:   {n:0,  cS:0xFF8844, cE:0xFFDD88},
+    };
+    for(const k of ENT){ S[k]=DEFAULTS[k].n; S[k+'_cS']=DEFAULTS[k].cS; S[k+'_cE']=DEFAULTS[k].cE; S[k+'_spd']=1; S[k+'_size']=1; S[k+'_angle']=null; S[k+'_tex']=null; }
+
+    // Global scene settings (AI-controlled)
+    const G = {
+      hue: 0,             // 0 = no shift, -180 to 180 = hue rotation in degrees
+      movement: 1.0,      // global speed multiplier on top of per-entity speed
+      density: 1.0,       // emit rate multiplier (0.3 = sparse, 2.0 = packed)
+      blendMode: 'add',   // 'add' (glowy) or 'normal' (solid/opaque)
+      glow: 0.5,          // rim light + ambient intensity (0=off, 1=bright, 2=intense)
+    };
+
+    function hexRGB(h){return{r:(h>>16)&0xFF,g:(h>>8)&0xFF,b:h&0xFF};}
+    function hexStr(n){return '#'+('000000'+n.toString(16)).slice(-6);}
+
+    for(const k of ENT){
+      const sl=document.getElementById('s-'+k),vl=document.getElementById('v-'+k);
+      sl.addEventListener('input',()=>{
+        S[k]=+sl.value;vl.textContent=S[k];
+        // Only one entity at a time — reset others when this one is activated
+        if(S[k]>0){
+          for(const other of ENT){
+            if(other!==k){
+              S[other]=0;
+              const osl=document.getElementById('s-'+other),ovl=document.getElementById('v-'+other);
+              if(osl)osl.value=0; if(ovl)ovl.textContent='0';
+            }
+          }
+        }
+      });
+      const csEl=document.getElementById('cS-'+k),ceEl=document.getElementById('cE-'+k);
+      if(csEl) csEl.addEventListener('input',e=>{S[k+'_cS']=parseInt(e.target.value.slice(1),16);updateAmb();});
+      if(ceEl) ceEl.addEventListener('input',e=>{S[k+'_cE']=parseInt(e.target.value.slice(1),16);});
+    }
+    function updateAmb(){
+      let best='flames',bestN=0;
+      for(const k of ENT) if(S[k]>bestN){bestN=S[k];best=k;}
+      const c=hexRGB(S[best+'_cS']);
+      document.documentElement.style.setProperty('--ar',c.r);
+      document.documentElement.style.setProperty('--ag',c.g);
+      document.documentElement.style.setProperty('--ab',c.b);
+    }
+
+    // Hue-shift a hex color by degrees
+    function hueShiftHex(hex, deg) {
+      if(!deg) return hex;
+      let r=((hex>>16)&0xFF)/255, g=((hex>>8)&0xFF)/255, b=(hex&0xFF)/255;
+      // RGB → HSL
+      const mx=max(r,g,b),mn=min(r,g,b),d=mx-mn;
+      let h=0,s=0,l=(mx+mn)/2;
+      if(d>0){
+        s=l>.5?d/(2-mx-mn):d/(mx+mn);
+        if(mx===r) h=((g-b)/d+(g<b?6:0))/6;
+        else if(mx===g) h=((b-r)/d+2)/6;
+        else h=((r-g)/d+4)/6;
+      }
+      // Shift hue
+      h=((h*360+deg)%360+360)%360;
+      // HSL → RGB
+      s*=100; l*=100;
+      const hx=h, sx=s/100, lx=l/100;
+      const a=sx*min(lx,1-lx);
+      const f=n=>{const k=(n+hx/30)%12;return lx-a*max(min(k-3,9-k,1),-1);};
+      return(round(f(0)*255)<<16)|(round(f(8)*255)<<8)|round(f(4)*255);
+    }
+
+    // ═══════════════════════════════════════════════════
+    // PRESETS
+    // ═══════════════════════════════════════════════════
+    const PRESETS={
+      racingcar:   { entities:{ flames:{n:30,cS:0xFF3300,cE:0xFFAA00}, dryice:{n:15,cS:0x444455,cE:0x888899}, fireworks:{n:8,cS:0xFF5500,cE:0xFFCC22} }},
+      sakura:      { entities:{ butterfly:{n:20,cS:0xFFAACC,cE:0xFF88BB}, snow:{n:12,cS:0xFFBBDD,cE:0xFFDDEE} }},
+      fireworkshow:{ entities:{ fireworks:{n:40,cS:0xFF2266,cE:0x44DDFF}, sparkle:{n:15,cS:0xFFEE44,cE:0xFFFFFF} }},
+      underwater:  { entities:{ bubbles:{n:30,cS:0x22AADD,cE:0x88FFEE}, dryice:{n:10,cS:0x114466,cE:0x226688} }},
+      wizard:      { entities:{ sparkle:{n:25,cS:0x8833FF,cE:0x44FFCC}, vortex:{n:12,cS:0x6622CC,cE:0xAA66FF} }},
+      party:       { entities:{ snow:{n:25,cS:0xFF3366,cE:0x33CCFF}, fireworks:{n:12,cS:0xFFAA00,cE:0xFF44CC} }},
+      frozen:      { entities:{ snow:{n:35,cS:0xAADDFF,cE:0xFFFFFF}, sparkle:{n:8,cS:0xDDEEFF,cE:0xFFFFFF} }},
+      dragon:      { entities:{ flames:{n:40,cS:0xFF2200,cE:0xFFAA00}, dryice:{n:12,cS:0x332222,cE:0x554433} }},
+      fairy:       { entities:{ sparkle:{n:30,cS:0xCC88FF,cE:0x88FFCC}, butterfly:{n:10,cS:0xFFAADD,cE:0xAADDFF} }},
+      superhero:   { entities:{ vortex:{n:15,cS:0x0066FF,cE:0x00CCFF}, flames:{n:15,cS:0x0044DD,cE:0x44AAFF} }},
+      spooky:      { entities:{ dryice:{n:25,cS:0x224422,cE:0x446644}, vortex:{n:10,cS:0x442266,cE:0x663388} }},
+      meteorshower:{ entities:{ meteor:{n:35,cS:0xFF6622,cE:0xFFCC66}, sparkle:{n:8,cS:0xFFDD88,cE:0xFFFFFF} }},
+      thunderstorm:{ entities:{ meteor:{n:20,cS:0x88BBFF,cE:0xFFFFFF}, snow:{n:20,cS:0x6699BB,cE:0x99BBDD}, dryice:{n:10,cS:0x334455,cE:0x556677} }},
+      reset:       { entities:{} },
+    };
+
+    function applyPreset(name){
+      const p=PRESETS[name]; if(!p) return;
+      for(const k of ENT){
+        const cfg=p.entities[k], count=cfg?cfg.n:0;
+        S[k]=count;
+        const sl=document.getElementById('s-'+k),vl=document.getElementById('v-'+k);
+        if(sl) sl.value=count; if(vl) vl.textContent=count;
+        if(cfg&&cfg.cS!==undefined){S[k+'_cS']=cfg.cS;const el=document.getElementById('cS-'+k);if(el)el.value=hexStr(cfg.cS);}
+        if(cfg&&cfg.cE!==undefined){S[k+'_cE']=cfg.cE;const el=document.getElementById('cE-'+k);if(el)el.value=hexStr(cfg.cE);}
+      }
+      updateAmb();
+      document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+      const btn=document.querySelector(`[data-preset="${name}"]`);if(btn)btn.classList.add('active');
+    }
+    document.querySelectorAll('.preset-btn').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.preset)));
+
+    // ═══════════════════════════════════════════════════
+    // GEMINI AI PROMPT → AURA
+    // ═══════════════════════════════════════════════════
+    const CLAUDE_KEY = localStorage.getItem('claude_api_key') || prompt('Enter your Anthropic API key:') || '';
+    if(CLAUDE_KEY && !localStorage.getItem('claude_api_key')) localStorage.setItem('claude_api_key', CLAUDE_KEY);
+    const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+
+    const SYS_PROMPT = `You are an expert visual effects designer creating particle auras for a kids' character app. Your goal is to make REALISTIC, IMMERSIVE auras that truly capture the essence of whatever the user describes.
+
+Think deeply about what the prompt LOOKS LIKE in real life, then translate that into particle entities.
+
+AVAILABLE ENTITIES (use exact keys):
+- "flames": Particles shooting UPWARD like fire/smoke. Great for: fire, exhaust, steam, rising energy, heat shimmer.
+- "bubbles": Round orbs floating UP slowly with wobble. Great for: underwater, soap bubbles, floating orbs, gentle magic.
+- "snow": Particles falling DOWN at a slant (wind-driven). Great for: snow, rain, falling leaves, confetti, ash, petals, debris. Use spd 1.5-2.5 for rain (fast, streaky), spd 0.4-0.8 for gentle snow, size 0.3-0.5 for rain drops, size 0.8-1.2 for snowflakes.
+- "fireworks": Particles bursting OUTWARD from center. Great for: explosions, scatter, celebration, shockwave, impact.
+- "butterfly": Erratic WANDERING paths with wing-flap. Great for: butterflies, birds, fireflies, floating creatures, spirits.
+- "sparkle": Tiny stars ORBITING in rings. Great for: magic aura, sparkle trail, fairy dust, enchantment, holy glow.
+- "vortex": Spiral INWARD toward center, growing bigger. Great for: tornado, whirlpool, absorption, power-up, suction.
+- "dryice": Smoke creeping along the GROUND horizontally. Great for: fog, mist, dry ice, ground smoke, eerie atmosphere.
+- "meteor": Fast diagonal STREAKS falling at a steep slant from upper-left to lower-right. Great for: meteor shower, lightning bolts, comet streaks, shooting stars. All streaks fall at the SAME angle (like a real meteor shower). Very fast and dramatic.
+
+ENTITY PROPERTIES:
+- "n": particle count (0-50). Higher = denser effect. Use 0 to disable.
+- "cS": start hex color (e.g. "#ff4400"). The color particles are born with.
+- "cE": end hex color. The color particles fade toward as they age.
+- "spd": speed multiplier (0.3 to 3.0, default 1.0). Controls how fast particles move.
+  - 0.3-0.5 = dreamy slow motion. Good for: gentle snow, calm bubbles, peaceful.
+  - 0.8-1.2 = normal. Good for: most effects.
+  - 1.5-2.0 = fast. Good for: racing, intense action, storms.
+  - 2.5-3.0 = extreme. Good for: explosions, rage, lightning.
+- "size": size multiplier (0.3 to 2.5, default 1.0). Controls particle scale.
+  - 0.3-0.5 = tiny particles. Good for: fine rain, dust, small sparkles.
+  - 0.8-1.2 = normal.
+  - 1.5-2.0 = large. Good for: big flames, thick smoke, large bubbles.
+  - 2.0-2.5 = huge. Good for: massive clouds, dramatic fog.
+- "angle": fall direction in DEGREES (only for "snow" and "meteor"). Controls the slant angle.
+  - 90 = straight DOWN (vertical rain, vertical meteor shower)
+  - 70-80 = gentle slant (light wind, default)
+  - 45-60 = strong diagonal (heavy wind, angled meteor shower)
+  - 30 = nearly horizontal (extreme wind)
+  - 110-120 = slant the OTHER direction (left-ward)
+  - Only set this when direction matters. Omit for default behavior.
+- "tex": preset shape name. Options: "smoke", "glow", "petal", "star", "heart", "diamond", "ring", "drop".
+  Only set when a specific shape improves realism. Omit for defaults.
+- "shape": AI-GENERATED custom shape! Instead of "tex", provide a shape object.
+  TWO MODES:
+
+  MODE 1 — Quick presets (use "type"):
+  - "star": pointed star. "points":3-12, "spike":0.1-0.9 (pointiness)
+  - "polygon": regular polygon. "points":3-8 (3=triangle, 6=hexagon)
+  - "flower": petal pattern. "points":3-8, "spike":0.2-0.8 (petal width)
+  - "burst": thin spike rays. "points":4-12
+  - "moon": crescent. "phase":0.1-0.9
+  - "cross": plus shape. "spike":0.2-0.6 (arm thickness)
+  - "spiral": spiral trail. "turns":1-4, "spike":0.2-0.8
+  - "wave": wavy blob. "points":3-8
+  Common params: "soft":0-1 (edge blur), "spike":0.1-0.9, "points":3-12
+  Example: {"type":"star","points":6,"spike":0.3,"soft":0.3}
+
+  MODE 2 — Freeform drawing (use "ops"): For ANY recognizable object!
+  Provide "ops": array of drawing operations. Coordinates are -1 to 1 (0,0=center).
+  Each op: {"op":"fill|cut|stroke", "shape":"...", ...params}
+  Operations:
+  - "fill": draws solid white shape
+  - "cut": punches transparent hole (for eyes, windows, cutouts)
+  - "stroke": draws outline only (set "w":0.02-0.15 for line width)
+  Shapes:
+  - "circle": "x","y","r"
+  - "ellipse": "x","y","rx","ry","angle"(degrees)
+  - "rect": "x","y","w","h" (centered). Optional "round":0.01-0.3 for rounded corners
+  - "poly": "pts":[[x,y],...] (auto-closed polygon — use for ANY silhouette)
+  - "arc": "x","y","r","a1","a2" (angles in PI units, e.g. 0.2=36°). Arc is always stroked.
+  - "bezier": "pts":[[x,y],...] (first=moveTo, then groups of 3 control points for bezierCurveTo). Set "close":false for open paths.
+  Common param: "soft":0-1 (edge softness for the whole shape)
+  TIPS for good shapes:
+  - Build from big fills + small cuts. Fill the body, cut out details.
+  - Keep coordinates within -0.9 to 0.9 so edges don't clip.
+  - For faces/characters: fill circle for head, cut circles for eyes, cut arc for mouth.
+  - For objects (plane, sword, arrow): use a single "poly" with the outline points.
+  - For curved objects (heart, cloud): use "bezier" or multiple overlapping "circle"/"ellipse".
+  Examples:
+  - Paper plane: {"ops":[{"op":"fill","shape":"poly","pts":[[0,-0.85],[0.75,0.5],[0,0.15],[-0.75,0.5]]},{"op":"fill","shape":"poly","pts":[[0,-0.85],[0.15,0.1],[0,0.5],[-0.15,0.1]]}],"soft":0.15}
+  - Smiley face: {"ops":[{"op":"fill","shape":"circle","r":0.8},{"op":"cut","shape":"circle","x":-0.25,"y":-0.18,"r":0.11},{"op":"cut","shape":"circle","x":0.25,"y":-0.18,"r":0.11},{"op":"cut","shape":"arc","x":0,"y":0.08,"r":0.38,"a1":0.15,"a2":0.85,"w":0.07}],"soft":0.3}
+  - Lightning bolt: {"ops":[{"op":"fill","shape":"poly","pts":[[-0.05,-0.9],[0.35,-0.15],[0.05,-0.1],[0.15,0.9],[-0.35,0.15],[-0.05,0.1]]}],"soft":0.1}
+  - Crown: {"ops":[{"op":"fill","shape":"poly","pts":[[-0.7,0.4],[-0.7,-0.1],[-0.4,-0.5],[0,-0.1],[0.4,-0.5],[0.7,-0.1],[0.7,0.4]]}],"soft":0.2}
+  - Cat face: {"ops":[{"op":"fill","shape":"circle","y":0.05,"r":0.6},{"op":"fill","shape":"poly","pts":[[-0.5,-0.3],[-0.3,-0.8],[-0.05,-0.35]]},{"op":"fill","shape":"poly","pts":[[0.5,-0.3],[0.3,-0.8],[0.05,-0.35]]},{"op":"cut","shape":"ellipse","x":-0.2,"y":-0.05,"rx":0.1,"ry":0.13},{"op":"cut","shape":"ellipse","x":0.2,"y":-0.05,"rx":0.1,"ry":0.13}],"soft":0.3}
+  Use MODE 2 when the prompt describes a recognizable OBJECT (plane, sword, animal, emoji, food, etc.)
+  Use MODE 1 for abstract patterns (sparkles, crystals, runes, etc.)
+  You can mix: use "tex" or "type" on some entities and "ops" on others.
+
+GLOBAL SCENE SETTINGS (optional — put in a "_global" key):
+- "hue": hue shift in degrees (-180 to 180). Rotates ALL colors. 0=no change.
+  - Use 30-60 for warm shift, -30 to -60 for cool shift.
+  - Great for: "golden hour" (+40), "moonlit" (-50), "alien planet" (+120).
+- "movement": global speed multiplier (0.1 to 3.0). Affects ALL entities on top of their own speed.
+  - 0.3 = dreamy slow-motion (everything moves in slow-mo). Good for: peaceful, meditation, underwater.
+  - 1.0 = normal (default).
+  - 2.0 = everything sped up. Good for: intense, hyperactive, time-lapse.
+- "density": particle density multiplier (0.2 to 3.0). More or fewer particles overall.
+  - 0.3 = sparse, minimal. Good for: subtle, elegant, quiet.
+  - 1.0 = normal (default).
+  - 2.0 = packed, dense. Good for: blizzard, heavy rain, intense action.
+- "blendMode": how particles blend with each other.
+  - "add" = additive glow (default). Particles glow and brighten when overlapping. Best for: magic, fire, sparkles, energy.
+  - "normal" = solid/opaque. Particles look solid, don't glow. Best for: confetti, leaves, rain, solid objects.
+- "glow": rim light and ambient glow intensity (0 to 2).
+  - 0 = no glow behind character. Good for: subtle, realistic.
+  - 0.5 = subtle glow (default).
+  - 1.0 = bright glow. Good for: magical, powerful, divine.
+  - 2.0 = intense radiating glow. Good for: super saiyan, ultimate power, blinding light.
+
+DESIGN GUIDELINES:
+1. Return ONLY valid JSON. No markdown, no explanation, no backticks, no text.
+2. Use EXACTLY 1 entity per design. Pick the SINGLE BEST entity that captures the prompt. NO combos.
+3. Put ALL the visual impact into that one entity — use high particle count (25-50), great colors, right speed/size/shape.
+4. Set "_global" to enhance the mood (e.g. dreamy=slow movement, intense=high density+glow).
+5. COLORS ARE CRITICAL — they must match the REAL-WORLD object the user described:
+   - ALWAYS ask yourself: "What color IS this thing in real life?" and use THAT.
+   - cS = the dominant/primary color of the object. cE = secondary/highlight tone.
+   - Food: pizza=#ff9933→#ffcc44, watermelon=#ff3355→#44cc44, chocolate=#663311→#aa6633
+   - Nature: grass=#33aa22→#66dd33, ocean=#1155aa→#33ccdd, sunset=#ff5522→#ffaa33, snow=#ccddff→#ffffff
+   - Fire/energy: fire=#ff5500→#ffcc00, lightning=#aaddff→#ffffff, lava=#cc2200→#ff8800, ice=#88ccff→#ddeeff
+   - Objects: gold=#ffcc00→#ffee66, silver=#aabbcc→#ddeeff, wood=#885522→#bb8844, stone=#667788→#99aabb
+   - Emotions: love=#ff3366→#ff88aa, anger=#cc1100→#ff4400, calm=#4488bb→#88ccdd, joy=#ffcc00→#ffee44
+   - Animals: use the animal's actual color! Cat=#ff9944→#ffcc88, frog=#33aa33→#66dd44, flamingo=#ff6688→#ffaacc
+   - Characters: match their known colors! Pikachu=#ffdd00→#ffee44, Hulk=#33aa22→#66dd33
+   - WRONG: using generic purple/blue for everything. WRONG: using white for colored objects.
+   - RIGHT: "paper plane" → white #eeeeff→#ffffff. "rose" → red #cc2244→#ff6688. "banana" → yellow #ffdd22→#ffee66.
+6. Think about what the user would ACTUALLY SEE in real life, then recreate it with matching colors, speed, and size.
+
+EXAMPLES:
+
+"gentle rain": {"_global":{"movement":0.8,"density":1.5,"blendMode":"normal","glow":0.3},"snow":{"n":45,"cS":"#6699bb","cE":"#99bbdd","spd":1.8,"size":0.3,"angle":88,"tex":"drop"}}
+
+"blizzard": {"_global":{"movement":1.5,"density":2.5,"glow":0.2,"hue":-10},"snow":{"n":50,"cS":"#ccddff","cE":"#ffffff","spd":2.2,"size":0.5,"angle":55}}
+
+"underwater": {"_global":{"movement":0.4,"density":1.2,"glow":0.8,"hue":-20},"bubbles":{"n":40,"cS":"#22aadd","cE":"#88ffee","spd":0.5,"size":1.2}}
+
+"super saiyan": {"_global":{"movement":1.8,"density":2.0,"glow":2.0,"hue":10},"flames":{"n":50,"cS":"#ffdd00","cE":"#ffffff","spd":2.0,"size":1.5}}
+
+"love valentines": {"_global":{"movement":0.6,"density":1.5,"glow":0.7},"snow":{"n":40,"cS":"#ff6699","cE":"#ffccdd","spd":0.5,"size":0.9,"angle":85,"tex":"heart"}}
+
+"ninja": {"_global":{"movement":1.3,"glow":0.3},"sparkle":{"n":35,"cS":"#334455","cE":"#667788","spd":1.2,"size":0.6,"shape":{"type":"star","points":4,"spike":0.2,"soft":0}}}
+
+"magical crystal": {"_global":{"glow":1.2},"sparkle":{"n":40,"cS":"#aa44ff","cE":"#ffffff","spd":0.6,"size":0.8,"shape":{"type":"polygon","points":6,"soft":0.4}}}
+
+"paper airplane": {"_global":{"movement":1.2,"glow":0.4,"blendMode":"normal"},"butterfly":{"n":30,"cS":"#ffffff","cE":"#bbddff","spd":0.8,"size":1.2,"shape":{"ops":[{"op":"fill","shape":"poly","pts":[[0,-0.85],[0.75,0.5],[0,0.15],[-0.75,0.5]]},{"op":"fill","shape":"poly","pts":[[0,-0.85],[0.12,0.1],[0,0.5],[-0.12,0.1]]}],"soft":0.15}}}
+
+"happy emoji shower": {"_global":{"movement":0.5,"density":1.5,"blendMode":"normal","glow":0.6},"snow":{"n":35,"cS":"#ffdd00","cE":"#ffaa00","spd":0.4,"size":1.4,"shape":{"ops":[{"op":"fill","shape":"circle","r":0.8},{"op":"cut","shape":"circle","x":-0.25,"y":-0.18,"r":0.11},{"op":"cut","shape":"circle","x":0.25,"y":-0.18,"r":0.11},{"op":"cut","shape":"arc","x":0,"y":0.08,"r":0.38,"a1":0.15,"a2":0.85,"w":0.07}],"soft":0.3}}}`;
+
+    const promptInput = document.getElementById('prompt-input');
+    const genBtn = document.getElementById('gen-btn');
+    const genStatus = document.getElementById('gen-status');
+
+    async function generateAura(prompt) {
+      if (!prompt.trim()) return;
+
+      genBtn.disabled = true;
+      genBtn.classList.add('loading');
+      genBtn.textContent = '...';
+      genStatus.textContent = 'Generating aura...';
+      genStatus.classList.remove('error');
+
+      try {
+        const res = await fetch(CLAUDE_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': CLAUDE_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 500,
+            system: SYS_PROMPT,
+            messages: [{
+              role: 'user',
+              content: 'Generate the aura config for: "' + prompt.trim() + '"'
+            }]
+          })
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const errMsg = errBody?.error?.message || ('Status ' + res.status);
+          throw new Error(errMsg);
+        }
+
+        const data = await res.json();
+        const text = data.content?.[0]?.text;
+        if (!text) throw new Error('No response from AI');
+
+        // Extract JSON (handle markdown code blocks if present)
+        let jsonStr = text.trim();
+        if (jsonStr.startsWith('```')) {
+          jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+        }
+        // Also handle if there's text before/after the JSON
+        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+        if (jsonMatch) jsonStr = jsonMatch[0];
+
+        const config = JSON.parse(jsonStr);
+
+        // Apply global scene settings
+        if(config._global) {
+          const gl = config._global;
+          if(gl.hue != null) G.hue = max(-180, min(180, gl.hue));
+          if(gl.movement != null) G.movement = max(0.1, min(3, gl.movement));
+          if(gl.density != null) G.density = max(0.2, min(3, gl.density));
+          if(gl.blendMode) G.blendMode = gl.blendMode === 'normal' ? 'normal' : 'add';
+          if(gl.glow != null) G.glow = max(0, min(2, gl.glow));
+        } else {
+          // Reset globals if not specified
+          G.hue=0; G.movement=1; G.density=1; G.blendMode='add'; G.glow=0.5;
+        }
+
+        // Apply to all sliders, colors, speed, size
+        for (const k of ENT) {
+          const cfg = config[k];
+          const count = cfg ? (cfg.n || 0) : 0;
+          S[k] = count;
+          const sl = document.getElementById('s-' + k);
+          const vl = document.getElementById('v-' + k);
+          if (sl) sl.value = count;
+          if (vl) vl.textContent = count;
+
+          if (cfg && cfg.cS) {
+            S[k + '_cS'] = parseInt(cfg.cS.replace('#', ''), 16);
+            const csEl = document.getElementById('cS-' + k);
+            if (csEl) csEl.value = cfg.cS;
+          }
+          if (cfg && cfg.cE) {
+            S[k + '_cE'] = parseInt(cfg.cE.replace('#', ''), 16);
+            const ceEl = document.getElementById('cE-' + k);
+            if (ceEl) ceEl.value = cfg.cE;
+          }
+          // Speed, size, angle from AI
+          S[k + '_spd'] = cfg && cfg.spd != null ? max(0.2, min(3, cfg.spd)) : 1;
+          S[k + '_size'] = cfg && cfg.size != null ? max(0.2, min(3, cfg.size)) : 1;
+          S[k + '_angle'] = cfg && cfg.angle != null ? cfg.angle : null;
+          // Shape: either a preset name OR a parametric shape config
+          if(cfg && cfg.shape && typeof cfg.shape === 'object' && _textures){
+            // AI sent parametric shape — generate it
+            S[k + '_tex'] = genCustomShape(cfg.shape, _textures);
+          } else {
+            S[k + '_tex'] = cfg && cfg.tex ? cfg.tex : null;
+          }
+        }
+        updateAmb();
+
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        genStatus.textContent = '✓ "' + prompt.trim().slice(0, 30) + '" aura applied!';
+
+      } catch (err) {
+        console.error('[Claude]', err);
+        genStatus.textContent = 'Failed — ' + (err.message || 'try again').slice(0, 60);
+        genStatus.classList.add('error');
+      } finally {
+        genBtn.disabled = false;
+        genBtn.classList.remove('loading');
+        genBtn.textContent = 'Generate';
+      }
+    }
+
+    genBtn.addEventListener('click', () => generateAura(promptInput.value));
+    promptInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') generateAura(promptInput.value);
+    });
+
+    // ═══════════════════════════════════════════════════
+    // MATH
+    // ═══════════════════════════════════════════════════
+    function lerp(a,b,t){return a+(b-a)*max(0,min(1,t));}
+    function lC(c1,c2,t){t=max(0,min(1,t));return(round(((c1>>16)&0xFF)+(((c2>>16)&0xFF)-((c1>>16)&0xFF))*t)<<16)|(round(((c1>>8)&0xFF)+(((c2>>8)&0xFF)-((c1>>8)&0xFF))*t)<<8)|round((c1&0xFF)+((c2&0xFF)-(c1&0xFF))*t);}
+    function ss(t){t=max(0,min(1,t));return t*t*(3-2*t);}
+    function hash2(x,y){let n=(x*73856093)^(y*19349663);n=((n<<13)^n)|0;return((n*(n*n*15731+789221)+1376312589)&0x7FFFFFFF)/2147483647;}
+    function noise2D(x,y){const xi=floor(x),yi=floor(y),xf=x-xi,yf=y-yi,sx=xf*xf*(3-2*xf),sy=yf*yf*(3-2*yf);return lerp(lerp(hash2(xi,yi),hash2(xi+1,yi),sx),lerp(hash2(xi,yi+1),hash2(xi+1,yi+1),sx),sy);}
+    function pulse(t){return .5+.28*sin(TAU*t/3)+.1*sin(TAU*t/1.4+1);}
+    function aS(t,fi,fo){return ss(min(t/fi,1))*ss(min((1-t)/fo,1));}
+
+    // ═══════════════════════════════════════════════════
+    // TEXTURE ATLAS — 8×2 grid, 128px cells
+    // ═══════════════════════════════════════════════════
+    //  ┌────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┐
+    //  │ smoke  │  glow  │ petal  │  star  │ custom0│custom1 │custom2 │custom3 │ row 0
+    //  ├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤
+    //  │ heart  │diamond │  ring  │  drop  │ custom4│custom5 │custom6 │custom7 │ row 1
+    //  └────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┘
+    const Q=128;
+    function genAtlas(){
+      const c=document.createElement('canvas');c.width=1024;c.height=256;
+      const ctx=c.getContext('2d');
+      const H=64; // half-cell (center offset)
+      function rad(cx,cy,r,stops){const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);stops.forEach(([o,col])=>g.addColorStop(o,col));ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,TAU);ctx.fill();}
+
+      // ── ROW 0 ──
+
+      // [0,0] SMOKE — soft organic cloud
+      rad(H,H,52,[[0,'rgba(255,255,255,.85)'],[.15,'rgba(255,255,255,.65)'],[.35,'rgba(255,255,255,.35)'],[.6,'rgba(255,255,255,.12)'],[.85,'rgba(255,255,255,.03)'],[1,'rgba(255,255,255,0)']]);
+      for(const[x,y,r]of[[52,48,24],[72,56,22],[56,72,21],[44,60,19]])
+        rad(x,y,r,[[0,'rgba(255,255,255,.22)'],[.5,'rgba(255,255,255,.05)'],[1,'rgba(255,255,255,0)']]);
+
+      // [1,0] GLOW — round orb with highlight
+      rad(Q+H,H,50,[[0,'rgba(255,255,255,0)'],[.7,'rgba(255,255,255,.02)'],[.82,'rgba(255,255,255,.15)'],[.9,'rgba(255,255,255,.06)'],[1,'rgba(255,255,255,0)']]);
+      rad(Q+H,H,24,[[0,'rgba(255,255,255,.88)'],[.2,'rgba(255,255,255,.55)'],[.5,'rgba(255,255,255,.2)'],[.8,'rgba(255,255,255,.04)'],[1,'rgba(255,255,255,0)']]);
+      rad(Q+H-5,H-5,9,[[0,'rgba(255,255,255,.45)'],[.5,'rgba(255,255,255,.1)'],[1,'rgba(255,255,255,0)']]);
+
+      // [2,0] PETAL — teardrop
+      ctx.save();ctx.translate(Q*2+H,H);
+      const pg=ctx.createRadialGradient(0,-4,0,0,0,40);
+      pg.addColorStop(0,'rgba(255,255,255,.88)');pg.addColorStop(.18,'rgba(255,255,255,.65)');
+      pg.addColorStop(.45,'rgba(255,255,255,.3)');pg.addColorStop(.75,'rgba(255,255,255,.06)');
+      pg.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=pg;ctx.beginPath();
+      ctx.moveTo(0,-36);ctx.bezierCurveTo(20,-21,23,9,0,28);ctx.bezierCurveTo(-23,9,-20,-21,0,-36);ctx.fill();ctx.restore();
+
+      // [3,0] STAR — 6-point sparkle
+      ctx.save();ctx.translate(Q*3+H,H);
+      rad(0,0,40,[[0,'rgba(255,255,255,.18)'],[.3,'rgba(255,255,255,.04)'],[1,'rgba(255,255,255,0)']]);
+      ctx.beginPath();for(let i=0;i<12;i++){const a=(i*TAU)/12-PI/2,r=(i%2===0)?32:10;if(i===0)ctx.moveTo(cos(a)*r,sin(a)*r);else ctx.lineTo(cos(a)*r,sin(a)*r);}ctx.closePath();
+      const sg=ctx.createRadialGradient(0,0,0,0,0,32);sg.addColorStop(0,'rgba(255,255,255,.85)');sg.addColorStop(.12,'rgba(255,255,255,.6)');sg.addColorStop(.3,'rgba(255,255,255,.25)');sg.addColorStop(.55,'rgba(255,255,255,.06)');sg.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=sg;ctx.fill();
+      rad(0,0,6,[[0,'rgba(255,255,255,.9)'],[.5,'rgba(255,255,255,.3)'],[1,'rgba(255,255,255,0)']]);
+      ctx.restore();
+
+      // ── ROW 1 ──
+
+      // [0,1] HEART ❤️ — full, round, symmetrical
+      ctx.save();ctx.translate(H,Q+H);
+      const hg=ctx.createRadialGradient(0,-6,0,0,0,48);
+      hg.addColorStop(0,'rgba(255,255,255,.95)');hg.addColorStop(.2,'rgba(255,255,255,.8)');
+      hg.addColorStop(.45,'rgba(255,255,255,.45)');hg.addColorStop(.7,'rgba(255,255,255,.12)');
+      hg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=hg;ctx.beginPath();
+      // Bottom tip
+      ctx.moveTo(0,30);
+      // Left side: tip → left lobe
+      ctx.bezierCurveTo(-6,24,-36,8,-36,-8);
+      // Left lobe top (wide, round bump)
+      ctx.bezierCurveTo(-36,-24,-22,-34,-2,-22);
+      // Right lobe top (mirror)
+      ctx.bezierCurveTo(22,-34,36,-24,36,-8);
+      // Right side: right lobe → tip
+      ctx.bezierCurveTo(36,8,6,24,0,30);
+      ctx.fill();
+      // Inner highlight on left lobe
+      rad(H-8,Q+H-12,8,[[0,'rgba(255,255,255,.3)'],[1,'rgba(255,255,255,0)']]);
+      ctx.restore();
+
+      // [1,1] DIAMOND 💎
+      ctx.save();ctx.translate(Q+H,Q+H);
+      const dg=ctx.createRadialGradient(0,0,0,0,0,38);
+      dg.addColorStop(0,'rgba(255,255,255,.9)');dg.addColorStop(.25,'rgba(255,255,255,.6)');
+      dg.addColorStop(.5,'rgba(255,255,255,.2)');dg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=dg;ctx.beginPath();
+      ctx.moveTo(0,-32);ctx.lineTo(22,0);ctx.lineTo(0,32);ctx.lineTo(-22,0);ctx.closePath();
+      ctx.fill();
+      // Facet highlight
+      rad(Q+H-4,Q+H-8,8,[[0,'rgba(255,255,255,.4)'],[1,'rgba(255,255,255,0)']]);
+      ctx.restore();
+
+      // [2,1] RING ⭕ — hollow circle
+      ctx.save();ctx.translate(Q*2+H,Q+H);
+      ctx.beginPath();ctx.arc(0,0,30,0,TAU);ctx.arc(0,0,18,0,TAU,true);ctx.closePath();
+      const rg=ctx.createRadialGradient(0,0,15,0,0,35);
+      rg.addColorStop(0,'rgba(255,255,255,.1)');rg.addColorStop(.35,'rgba(255,255,255,.7)');
+      rg.addColorStop(.6,'rgba(255,255,255,.4)');rg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=rg;ctx.fill();
+      ctx.restore();
+
+      // [3,1] RAINDROP 💧 — elongated water drop
+      ctx.save();ctx.translate(Q*3+H,Q+H);
+      const drg=ctx.createRadialGradient(0,6,0,0,0,36);
+      drg.addColorStop(0,'rgba(255,255,255,.9)');drg.addColorStop(.2,'rgba(255,255,255,.65)');
+      drg.addColorStop(.5,'rgba(255,255,255,.25)');drg.addColorStop(.8,'rgba(255,255,255,.05)');
+      drg.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=drg;ctx.beginPath();
+      ctx.moveTo(0,-34);
+      ctx.bezierCurveTo(4,-24,18,-4,18,10);
+      ctx.bezierCurveTo(18,24,10,30,0,30);
+      ctx.bezierCurveTo(-10,30,-18,24,-18,10);
+      ctx.bezierCurveTo(-18,-4,-4,-24,0,-34);
+      ctx.fill();
+      // Highlight
+      rad(Q*3+H-4,Q+H+2,6,[[0,'rgba(255,255,255,.35)'],[1,'rgba(255,255,255,0)']]);
+      ctx.restore();
+
+      return c;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // PARAMETRIC SHAPE GENERATOR (AI-driven)
+    // ═══════════════════════════════════════════════════
+    // Draws shapes into the custom slots of the atlas canvas.
+    // Types: star, polygon, flower, burst, moon, spiral, cross, wave
+    let _atlasCanvas=null, _atlasBaseTex=null, _textures=null;
+    const CUSTOM_SLOTS=8; // custom0..custom7
+    let _nextCustomSlot=0;
+
+    // ── Freeform shape renderer (AI sends drawing ops) ──
+    function drawFreeformShape(ctx, cx, cy, params){
+      const R=48, soft=max(0,min(1,params.soft||.4));
+      const ops=params.ops;
+
+      ctx.save();
+      ctx.translate(cx,cy);
+      // Clip to cell so destination-out can't bleed into other atlas slots
+      ctx.beginPath();ctx.rect(-Q/2,-Q/2,Q,Q);ctx.clip();
+
+      for(const op of ops){
+        const m=op.op||'fill';
+        const sh=op.shape||'circle';
+        const isCut=m==='cut';
+        const isStroke=m==='stroke'||(isCut&&sh==='arc');
+
+        ctx.globalCompositeOperation=isCut?'destination-out':'source-over';
+
+        const ox=(op.x||0)*R, oy=(op.y||0)*R;
+        ctx.beginPath();
+        if(sh==='circle'){
+          ctx.arc(ox,oy,(op.r||.5)*R,0,TAU);
+        } else if(sh==='ellipse'){
+          ctx.ellipse(ox,oy,(op.rx||.5)*R,(op.ry||.3)*R,(op.angle||0)*PI/180,0,TAU);
+        } else if(sh==='rect'){
+          const rw=(op.w||.5)*R,rh=(op.h||.5)*R;
+          if(op.round){
+            const cr=min((op.round||0)*R,rw/2,rh/2);
+            const lx=ox-rw/2,ly=oy-rh/2;
+            ctx.moveTo(lx+cr,ly);ctx.lineTo(lx+rw-cr,ly);ctx.quadraticCurveTo(lx+rw,ly,lx+rw,ly+cr);
+            ctx.lineTo(lx+rw,ly+rh-cr);ctx.quadraticCurveTo(lx+rw,ly+rh,lx+rw-cr,ly+rh);
+            ctx.lineTo(lx+cr,ly+rh);ctx.quadraticCurveTo(lx,ly+rh,lx,ly+rh-cr);
+            ctx.lineTo(lx,ly+cr);ctx.quadraticCurveTo(lx,ly,lx+cr,ly);ctx.closePath();
+          } else {
+            ctx.rect(ox-rw/2,oy-rh/2,rw,rh);
+          }
+        } else if(sh==='poly'){
+          const pts=op.pts||[];
+          for(let i=0;i<pts.length;i++){
+            if(i===0)ctx.moveTo(pts[i][0]*R,pts[i][1]*R);
+            else ctx.lineTo(pts[i][0]*R,pts[i][1]*R);
+          }
+          ctx.closePath();
+        } else if(sh==='arc'){
+          ctx.arc(ox,oy,(op.r||.5)*R,(op.a1||0)*PI,(op.a2||1)*PI);
+        } else if(sh==='bezier'){
+          // pts: [[x,y],...] — first point is moveTo, then groups of 3 for bezierCurveTo
+          const pts=op.pts||[];
+          if(pts.length>=1){
+            ctx.moveTo(pts[0][0]*R,pts[0][1]*R);
+            for(let i=1;i+2<pts.length;i+=3){
+              ctx.bezierCurveTo(pts[i][0]*R,pts[i][1]*R,pts[i+1][0]*R,pts[i+1][1]*R,pts[i+2][0]*R,pts[i+2][1]*R);
+            }
+          }
+          if(op.close!==false)ctx.closePath();
+        }
+
+        if(isStroke){
+          ctx.lineWidth=max(1,(op.w||.06)*R);
+          ctx.lineCap='round';ctx.lineJoin='round';
+          ctx.strokeStyle=isCut?'rgba(255,255,255,.9)':'rgba(255,255,255,.85)';
+          ctx.stroke();
+        } else {
+          ctx.fillStyle=isCut?'rgba(255,255,255,.9)':`rgba(255,255,255,${.85-soft*.15})`;
+          ctx.fill();
+        }
+      }
+
+      // Soft-edge mask: radial fade using destination-in
+      ctx.globalCompositeOperation='destination-in';
+      const edge=max(.3,.7-soft*.4);
+      const eg=ctx.createRadialGradient(0,0,0,0,0,R*1.15);
+      eg.addColorStop(0,'rgba(255,255,255,1)');
+      eg.addColorStop(edge,'rgba(255,255,255,1)');
+      eg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=eg;ctx.beginPath();ctx.arc(0,0,R*1.15,0,TAU);ctx.fill();
+
+      ctx.globalCompositeOperation='source-over';
+      ctx.restore();
+    }
+
+    // ── Parametric shape presets (star, polygon, flower, etc.) ──
+    function drawParamShape(ctx, cx, cy, params){
+      // Freeform ops mode — delegate to freeform renderer
+      if(params.ops&&Array.isArray(params.ops)){
+        return drawFreeformShape(ctx,cx,cy,params);
+      }
+
+      const R=48;
+      const type=params.type||'star';
+      const pts=max(3,min(12,params.points||5));
+      const spike=max(.1,min(.9,params.spike||.4));
+      const soft=max(0,min(1,params.soft||.4));
+
+      // Gradient fill — (0,0) because drawing happens after translate
+      const outerR=R*(1+soft*.3);
+      const g=ctx.createRadialGradient(0,0,0,0,0,outerR);
+      g.addColorStop(0,`rgba(255,255,255,${.9-.3*soft})`);
+      g.addColorStop(.3,`rgba(255,255,255,${.6-.2*soft})`);
+      g.addColorStop(.7,`rgba(255,255,255,${.2})`);
+      g.addColorStop(1,'rgba(255,255,255,0)');
+
+      ctx.save();
+      ctx.translate(cx,cy);
+
+      if(type==='star'){
+        const inner=R*spike, outer=R;
+        ctx.beginPath();
+        for(let i=0;i<pts*2;i++){
+          const a=(i*PI)/pts-PI/2;
+          const r=i%2===0?outer:inner;
+          if(i===0)ctx.moveTo(cos(a)*r,sin(a)*r);
+          else ctx.lineTo(cos(a)*r,sin(a)*r);
+        }
+        ctx.closePath();
+      } else if(type==='polygon'){
+        ctx.beginPath();
+        for(let i=0;i<pts;i++){
+          const a=(i*TAU)/pts-PI/2;
+          if(i===0)ctx.moveTo(cos(a)*R,sin(a)*R);
+          else ctx.lineTo(cos(a)*R,sin(a)*R);
+        }
+        ctx.closePath();
+      } else if(type==='flower'){
+        ctx.beginPath();
+        for(let i=0;i<360;i++){
+          const a=i*PI/180;
+          const r=R*(.5+.5*pow(abs(cos(a*pts/2)),spike*2));
+          const x=cos(a)*r,y=sin(a)*r;
+          if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+        }
+        ctx.closePath();
+      } else if(type==='burst'){
+        ctx.beginPath();
+        for(let i=0;i<pts*2;i++){
+          const a=(i*PI)/pts-PI/2;
+          const r=i%2===0?R:R*.12;
+          if(i===0)ctx.moveTo(cos(a)*r,sin(a)*r);
+          else ctx.lineTo(cos(a)*r,sin(a)*r);
+        }
+        ctx.closePath();
+      } else if(type==='moon'){
+        const phase=max(0,min(1,params.phase||.3));
+        ctx.beginPath();
+        ctx.arc(0,0,R,0,TAU);
+        ctx.arc(R*phase*.6,0,R*.85,0,TAU,true);
+        ctx.closePath();
+      } else if(type==='spiral'){
+        const turns=max(1,min(4,params.turns||2));
+        ctx.beginPath();
+        for(let i=0;i<360*turns;i++){
+          const a=i*PI/180;
+          const r=R*(i/(360*turns));
+          const x=cos(a)*r,y=sin(a)*r;
+          if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+        }
+        ctx.lineWidth=3+4*spike;
+        ctx.strokeStyle=g;ctx.stroke();ctx.restore();return;
+      } else if(type==='cross'){
+        const w=R*spike;
+        ctx.beginPath();
+        ctx.moveTo(-w,-R);ctx.lineTo(w,-R);ctx.lineTo(w,-w);ctx.lineTo(R,-w);
+        ctx.lineTo(R,w);ctx.lineTo(w,w);ctx.lineTo(w,R);ctx.lineTo(-w,R);
+        ctx.lineTo(-w,w);ctx.lineTo(-R,w);ctx.lineTo(-R,-w);ctx.lineTo(-w,-w);
+        ctx.closePath();
+      } else if(type==='wave'){
+        ctx.beginPath();
+        for(let i=0;i<360;i++){
+          const a=i*PI/180;
+          const r=R*(.6+.4*sin(a*pts));
+          if(i===0)ctx.moveTo(cos(a)*r,sin(a)*r);else ctx.lineTo(cos(a)*r,sin(a)*r);
+        }
+        ctx.closePath();
+      } else {
+        // Fallback: circle
+        ctx.beginPath();ctx.arc(0,0,R,0,TAU);ctx.closePath();
+      }
+
+      ctx.fillStyle=g;ctx.fill();
+      // Soft glow behind
+      if(soft>.2){
+        const sg=ctx.createRadialGradient(0,0,0,0,0,R*1.2);
+        sg.addColorStop(0,`rgba(255,255,255,${soft*.15})`);
+        sg.addColorStop(1,'rgba(255,255,255,0)');
+        ctx.fillStyle=sg;
+        ctx.beginPath();ctx.arc(0,0,R*1.2,0,TAU);ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Generate a custom shape into atlas slot, return texture key name
+    function genCustomShape(params, tex){
+      if(!_atlasCanvas||!_atlasBaseTex) return 'glow'; // fallback
+      const slot=_nextCustomSlot%CUSTOM_SLOTS;
+      _nextCustomSlot++;
+      const col=4+(slot%4);
+      const row=floor(slot/4);
+      const cx=col*Q+Q/2, cy=row*Q+Q/2;
+
+      // Clear this slot
+      const ctx=_atlasCanvas.getContext('2d');
+      ctx.clearRect(col*Q, row*Q, Q, Q);
+
+      // Draw the parametric shape
+      drawParamShape(ctx, cx, cy, params);
+
+      // Update the base texture so PixiJS picks up changes
+      _atlasBaseTex.update();
+
+      const name='custom'+slot;
+      // Create or update texture frame
+      if(!tex[name]){
+        tex[name]=new PIXI.Texture(_atlasBaseTex,new PIXI.Rectangle(col*Q,row*Q,Q,Q));
+      }
+      return name;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // POOL
+    // ═══════════════════════════════════════════════════
+    const MAX_P=250;
+    function mkP(){return{sprite:null,active:false,life:0,maxLife:2,x:0,y:0,vx:0,vy:0,baseX:0,baseY:0,angle:0,radius:0,orbitSpd:0,phase:0,rotSpd:0,scaleMax:.4,cS:0xFFFFFF,cE:0xFFFFFF,flashT:0,beh:'',noX:0,noY:0,startR:0,spdMul:1,sizeMul:1,angleCfg:null};}
+    class Pool{
+      constructor(cont,tex,n){this.a=[];this.n=n;for(let i=0;i<n;i++){const p=mkP();const s=new PIXI.Sprite(tex);s.anchor.set(.5);s.visible=false;s.alpha=0;cont.addChild(s);p.sprite=s;this.a.push(p);}}
+      get(){for(let i=0;i<this.n;i++)if(!this.a[i].active)return this.a[i];return null;}
+      free(p){p.active=false;p.sprite.visible=false;p.sprite.alpha=0;}
+      get cnt(){let c=0;for(let i=0;i<this.n;i++)if(this.a[i].active)c++;return c;}
+    }
+
+    // ═══════════════════════════════════════════════════
+    // 8 BEHAVIORS — each unmistakably different
+    // ═══════════════════════════════════════════════════
+    const W=520,H=500,CX=W/2,CY=H/2-5;
+    const TX={flames:'smoke',bubbles:'glow',snow:'petal',fireworks:'petal',butterfly:'petal',sparkle:'star',vortex:'smoke',dryice:'smoke',meteor:'star'};
+    const AL={flames:4,bubbles:3.5,snow:4,fireworks:2.5,butterfly:3.5,sparkle:4.5,vortex:3,dryice:5,meteor:1.2};
+
+    const Beh={
+
+      // ═══ 🔥 FLAMES — fast UP, smoky, hot ══════════
+      // Motion: STRONG upward. Wide base → narrow top.
+      // Very different from bubbles (flames are fast/turbulent, bubbles are slow/round).
+      flames:{
+        init(p){
+          p.x=CX+(random()-.5)*120; p.y=CY+35+random()*40;
+          p.vy=-(90+random()*80); p.vx=(random()-.5)*15;
+          p.maxLife=1.4+random()*1.3; p.phase=random()*TAU;
+          p.scaleMax=.2+random()*.4; p.rotSpd=(random()-.5)*2; p.noX=random()*100;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.vy-=50*sp*dt; p.y+=p.vy*sp*dt; p.x+=p.vx*sp*dt;
+          // Turbulent wobble — gets wider at top
+          p.x+=sin(el*3+p.phase)*(15+40*t)*dt;
+          p.x+=(noise2D(el*.6+p.noX,p.life*.5)-.5)*30*dt;
+          // Converge toward center
+          p.x+=(CX-p.x)*.2*t*dt;
+          p.sprite.scale.set(max(.01,(1-t*.5)*p.scaleMax*(.9+.15*hb)));
+          p.sprite.alpha=aS(t,.08,.22)*(.45+.25*hb)*(1-t*.8);
+          p.sprite.tint=p.cS;
+          p.sprite.rotation+=p.rotSpd*dt;
+        }
+      },
+
+      // ═══ 🫧 BUBBLES — slow UP, round, wobbly, POP ══
+      // Motion: GENTLE upward. Big round shapes. Wobble side-to-side.
+      // Very different from flames (bubbles are slow/clean, flames are fast/chaotic).
+      bubbles:{
+        init(p){
+          p.x=CX+(random()-.5)*100; p.y=CY+45+random()*25;
+          p.vy=-(15+random()*18); p.vx=(random()-.5)*5;
+          p.maxLife=3+random()*1.5; p.phase=random()*TAU;
+          p.scaleMax=.18+random()*.35;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.vy-=3*sp*dt; p.y+=p.vy*sp*dt; p.x+=p.vx*sp*dt;
+          // Wide wobbly sway — like a real bubble
+          p.x+=sin(el*1.8+p.phase)*28*dt;
+          p.x+=cos(el*1.1+p.phase*.7)*10*dt;
+          // Grows then pops
+          const grow=ss(min(t*3,1));
+          const pop=t>.88?pow(1-(t-.88)/.12,2):1;
+          p.sprite.scale.set(max(.01,grow*pop*p.scaleMax*(.9+.12*hb)));
+          p.sprite.alpha=aS(t,.1,.06)*(.35+.15*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(.5+.5*sin(el*1.2+p.phase)));
+          p.sprite.rotation=sin(el*.8+p.phase)*.1;
+        }
+      },
+
+      // ═══ ❄️ SNOW — DOWN, tumbling, pendulum sway ═══
+      // Motion: falls DOWN. Tumbles and sways like real snow/confetti.
+      // Clearly opposite direction from flames and bubbles.
+      snow:{
+        init(p){
+          // angle from AI: 90=straight down (vertical rain), 70=slight slant, 45=heavy diagonal
+          // Default 80° = gentle slant (light wind)
+          const aDeg = p.angleCfg != null ? p.angleCfg : (75 + random()*10);
+          const aRad = aDeg * PI / 180;
+
+          p.x=CX+(random()-.5)*260; p.y=CY-125-random()*35;
+          const fallSpeed = 20 + random()*22;
+          p.vx = cos(aRad) * fallSpeed;
+          p.vy = sin(aRad) * fallSpeed;
+          p.maxLife=2.8+random()*2.2; p.phase=random()*TAU;
+          p.scaleMax=.08+random()*.2;
+          p.rotSpd=(random()-.5)*4;
+          p.angle = aRad; // store for rotation
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.vy+=3*sp*dt;
+          p.y+=p.vy*sp*dt;
+          p.x+=p.vx*sp*dt;
+          // Gentle sway on top of wind
+          p.x+=sin(el*2+p.phase)*6*dt;
+          // At high speed, align rotation with velocity (rain streaks)
+          if(sp>1.0){
+            p.sprite.rotation=Math.atan2(p.vy*sp, p.vx*sp)+PI*.5;
+          } else {
+            p.sprite.rotation+=p.rotSpd*dt;
+          }
+          const flip=.5+.5*abs(sin(el*3+p.phase));
+          p.sprite.scale.set(max(.01,flip*sin(t*PI)*p.scaleMax*(.9+.1*hb)));
+          p.sprite.alpha=aS(t,.12,.18)*(.35+.12*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(.5+.5*sin(p.phase*3+t*2)));
+        }
+      },
+
+      // ═══ 🎆 FIREWORKS — OUTWARD explosion ══════════
+      // Motion: fast outward burst from center in ALL directions.
+      // Only entity that moves radially outward.
+      fireworks:{
+        init(p){
+          const a=random()*TAU,v=80+random()*100;
+          p.x=CX+(random()-.5)*6; p.y=CY+(random()-.5)*6;
+          p.vx=cos(a)*v; p.vy=sin(a)*v;
+          p.maxLife=1.5+random()*1.8;
+          p.rotSpd=(random()-.5)*5; p.scaleMax=.14+random()*.3; p.phase=random()*TAU;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          const drag=pow(.978,60*dt);
+          p.vx*=drag; p.vy*=drag; p.vy+=20*sp*dt;
+          p.x+=p.vx*sp*dt; p.y+=p.vy*sp*dt;
+          p.sprite.rotation+=p.rotSpd*(1-t*.4)*dt;
+          const si=ss(min(t*6,1));
+          p.sprite.scale.set(max(.01,si*(1-t*.3)*p.scaleMax*(.9+.1*hb)));
+          p.sprite.alpha=aS(t,.05,.28)*(.5+.2*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(t));
+        }
+      },
+
+      // ═══ 🦋 BUTTERFLIES — erratic WANDERING ═══════
+      // Motion: random noise-driven flight with wing-flapping.
+      // Only entity that moves unpredictably in all directions.
+      butterfly:{
+        init(p){
+          const a=random()*TAU,d=15+random()*70;
+          p.x=CX+cos(a)*d; p.y=CY+sin(a)*d*.6;
+          p.vx=(random()-.5)*40; p.vy=(random()-.5)*30;
+          p.maxLife=3+random()*2; p.phase=random()*TAU;
+          p.scaleMax=.25+random()*.35;  // bigger base size
+          p.noX=random()*100; p.noY=random()*100;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          // Noise-driven wandering
+          const nx=(noise2D(el*.5+p.noX,p.life*.35)-.5)*110*sp;
+          const ny=(noise2D(p.noY,el*.4+p.life*.35)-.5)*90*sp;
+          p.vx+=(nx-p.vx)*2*dt; p.vy+=(ny-p.vy)*2*dt;
+          p.x+=p.vx*dt; p.y+=p.vy*dt;
+          // Keep near character (gentle pull)
+          p.x+=(CX-p.x)*.25*dt; p.y+=(CY-p.y)*.2*dt;
+          // Wing-flap: scale oscillates but never goes below 0.7
+          const flap=.7+.3*abs(sin(el*6+p.phase));
+          // Life scale: quick fade-in, sustain, gentle fade-out
+          const lifeScale=aS(t,.08,.15);
+          p.sprite.scale.set(max(.02, flap*lifeScale*p.scaleMax*(.9+.15*hb)));
+          p.sprite.alpha=aS(t,.08,.12)*(.5+.2*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(.5+.5*sin(el*.4+p.phase)));
+          p.sprite.rotation=Math.atan2(p.vy,p.vx);
+        }
+      },
+
+      // ═══ ✨ SPARKLE TRAIL — ORBITING ring ══════════
+      // Motion: clean circular orbit + twinkle sparkle.
+      // Only entity that clearly goes in circles. Small, bright, pointy stars.
+      sparkle:{
+        init(p){
+          p.angle=random()*TAU;
+          const r=random();
+          p.radius=r<.4?35+random()*12:r<.75?60+random()*12:85+random()*12;
+          p.orbitSpd=(.5+random()*.4)*(1.3-p.radius/120)*(random()>.5?1:-1);
+          p.maxLife=3.5+random()*2.5; p.phase=random()*TAU;
+          p.scaleMax=.04+random()*.12;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.angle+=p.orbitSpd*sp*dt;
+          const r=p.radius+sin(el*.5+p.phase)*6;
+          p.x=CX+r*cos(p.angle); p.y=CY+r*sin(p.angle)*.55;
+          // Depth
+          const depth=(.5+.5*sin(p.angle));
+          // Twinkle: sharp flash
+          const twinkle=pow(sin(t*PI),2);
+          const sparkle=1+.5*sin(el*9+p.phase);
+          p.sprite.scale.set(max(.005,twinkle*p.scaleMax*sparkle*(.5+.5*depth)));
+          p.sprite.alpha=twinkle*(.4+.35*depth)*(.5+.25*hb);
+          p.sprite.tint=t<.15?0xFFFFFF:lC(0xFFFFFF,p.cS,ss((t-.15)/.5));
+          p.sprite.rotation=el*2+p.phase;
+        }
+      },
+
+      // ═══ 🌀 VORTEX — SPIRAL INWARD ════════════════
+      // Motion: starts far out, spirals INWARD toward center, grows bigger.
+      // Opposite of fireworks (inward vs outward). Different from orbit (spiral vs circle).
+      vortex:{
+        init(p){
+          p.angle=random()*TAU;
+          p.startR=100+random()*55;
+          p.radius=p.startR;
+          p.orbitSpd=(1.2+random()*.8)*(random()>.5?1:-1);
+          p.maxLife=2.2+random()*1.8; p.phase=random()*TAU;
+          p.scaleMax=.13+random()*.28; p.rotSpd=(random()-.5)*2.5;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.angle+=p.orbitSpd*(1+t)*sp*dt; // gets faster as it spirals in
+          p.radius=p.startR*(1-t*.88); // shrinks toward center
+          p.x=CX+(p.radius+sin(el*.7+p.phase)*4)*cos(p.angle);
+          p.y=CY+(p.radius+sin(el*.7+p.phase)*4)*sin(p.angle)*.6;
+          // Gets bigger and more opaque as it approaches center
+          const sc=(.3+.7*t)*p.scaleMax*(.9+.15*hb);
+          p.sprite.scale.set(max(.01,sc*aS(t,.08,.1)));
+          p.sprite.alpha=aS(t,.08,.08)*(.3+.25*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(t));
+          p.sprite.rotation+=p.rotSpd*dt*(1+t*1.5);
+        }
+      },
+
+      // ═══ 🌫️ DRY ICE — HORIZONTAL ground creep ═════
+      // Motion: spawns at feet, spreads SIDEWAYS, hugs the ground.
+      // Only entity that moves horizontally and stays low.
+      dryice:{
+        init(p){
+          p.x=CX+(random()-.5)*50; p.y=CY+55+random()*15;
+          p.baseY=CY+60+random()*18;
+          const dir=random()>.5?1:-1;
+          p.vx=dir*(12+random()*22); p.vy=2+random()*4;
+          p.maxLife=4+random()*3; p.phase=random()*TAU;
+          p.scaleMax=.3+random()*.5; p.rotSpd=(random()-.5)*.35;
+          p.noX=random()*100; p.noY=random()*100;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+          p.x+=p.vx*sp*dt; p.vx*=1+.12*dt;
+          p.y+=p.vy*dt;
+          if(p.y<p.baseY) p.y+=(p.baseY-p.y)*.8*dt;
+          if(p.y>p.baseY+22){p.y=p.baseY+22;p.vy=0;}
+          p.x+=(noise2D(el*.15+p.noX,p.life*.1)-.5)*12*dt;
+          p.y+=(noise2D(p.noY,el*.12+p.life*.08)-.5)*3*dt;
+          const growIn=ss(min(t*2.5,1)),fadeOut=ss(min((1-t)/.3,1));
+          p.sprite.scale.set(max(.02,growIn*fadeOut*p.scaleMax*(.85+.15*hb)));
+          const ai=ss(min(t/.15,1)),ao=ss(min((1-t)/.25,1));
+          p.sprite.alpha=ai*ao*(.18+.08*hb);
+          p.sprite.tint=lC(p.cS,p.cE,ss(t*.4));
+          p.sprite.rotation+=p.rotSpd*dt;
+        }
+      },
+
+      // ═══ ☄️ METEOR — fast diagonal streaks from top ═══
+      // Motion: FAST diagonal fall from upper corners toward center.
+      // Streaked/elongated. Brief bright flash on spawn. Very different
+      // from Snow (slow sway) — these are FAST, angled, dramatic.
+      // Works for: meteors, thunder bolts, rain streaks, comet shower.
+      meteor:{
+        init(p){
+          // angle from AI: 0=right, 90=straight down, 180=left, -45=up-right diagonal
+          // Default ~70° = steep slant down-right (classic meteor shower)
+          const aDeg = p.angleCfg != null ? p.angleCfg : (65 + random()*15);
+          const aRad = aDeg * PI / 180;
+          const speed = 200 + random()*180;
+
+          // Spawn position: offset opposite to travel direction so streaks cross the character
+          const spawnOffsetX = -cos(aRad) * 120;  // spawn opposite to direction
+          p.x = CX + (random()-.5)*280 + spawnOffsetX * 0.5;
+          p.y = -20 - random()*50;
+
+          p.vx = cos(aRad) * speed;
+          p.vy = sin(aRad) * speed;
+
+          p.maxLife = .4 + random()*.6;
+          p.phase = random()*TAU;
+          p.scaleMax = .05 + random()*.12;
+          p.rotSpd = 0;
+          p.flashT = .06;
+          p.noX = random()*100;
+          p.angle = aRad;
+        },
+        update(p,dt,el,sp){
+          sp=sp||1; const t=p.life/p.maxLife,hb=pulse(el);
+
+          // Slight gravity acceleration (gets faster as it falls)
+          p.vy += 80*sp*dt;
+          p.x += p.vx*sp*dt;
+          p.y += p.vy*sp*dt;
+
+          // Very minimal wobble (meteors are straight, not wavy)
+          p.x += (noise2D(el*.2+p.noX,p.life*.3)-.5)*4*dt;
+
+          // Rotation locked to travel direction (streak effect)
+          p.sprite.rotation = Math.atan2(p.vy, p.vx) + PI*.5;
+
+          // Scale: stretched along streak. Starts bright, fades to thin tail.
+          const streak = p.scaleMax * (1.3 - t*.8);
+          p.sprite.scale.set(max(.01, streak*(.8+.2*hb)));
+
+          // Flash on spawn
+          p.flashT -= dt;
+          const flash = p.flashT > 0;
+          const fi = min(t*15, 1);
+          const fo = max(0, 1 - pow(t, 1.2));
+          const baseAlpha = fi * fo * (.55+.25*hb);
+          p.sprite.alpha = flash ? min(1, baseAlpha*2.5) : baseAlpha;
+
+          // White-hot head → colored tail
+          p.sprite.tint = t<.1 ? 0xFFFFFF : lC(0xFFFFFF, lC(p.cS,p.cE,ss(t)), ss((t-.1)/.35));
+        }
+      },
+    };
+
+    // ═══════════════════════════════════════════════════
+    // MAIN
+    // ═══════════════════════════════════════════════════
+    const CHAR_IMG='image-removebg-preview.png';
+    const loadEl=document.getElementById('loading'),fpsEl=document.getElementById('fps');
+    const errEl=document.getElementById('error-msg'),wrapEl=document.getElementById('pixi-wrap');
+
+    try{
+      if(typeof PIXI==='undefined') throw new Error('No PIXI');
+      const app=new PIXI.Application({width:W,height:H,backgroundColor:0x1c1c28,antialias:false,resolution:1,autoDensity:true,powerPreference:'low-power'});
+      app.ticker.maxFPS=60;wrapEl.appendChild(app.view);
+
+      const atlas=genAtlas();
+      _atlasCanvas=atlas;
+      const bTex=PIXI.BaseTexture.from(atlas,{scaleMode:PIXI.SCALE_MODES.LINEAR});
+      _atlasBaseTex=bTex;
+      // Store tex ref globally for shape generator access
+      const tex={
+        smoke:new PIXI.Texture(bTex,new PIXI.Rectangle(0,0,Q,Q)),
+        glow:new PIXI.Texture(bTex,new PIXI.Rectangle(Q,0,Q,Q)),
+        petal:new PIXI.Texture(bTex,new PIXI.Rectangle(Q*2,0,Q,Q)),
+        star:new PIXI.Texture(bTex,new PIXI.Rectangle(Q*3,0,Q,Q)),
+        heart:new PIXI.Texture(bTex,new PIXI.Rectangle(0,Q,Q,Q)),
+        diamond:new PIXI.Texture(bTex,new PIXI.Rectangle(Q,Q,Q,Q)),
+        ring:new PIXI.Texture(bTex,new PIXI.Rectangle(Q*2,Q,Q,Q)),
+        drop:new PIXI.Texture(bTex,new PIXI.Rectangle(Q*3,Q,Q,Q)),
+      };
+      _textures=tex;
+
+      const cont=new PIXI.ParticleContainer(MAX_P,{vertices:true,position:true,rotation:true,uvs:true,tint:true});
+      cont.blendMode=PIXI.BLEND_MODES.ADD;app.stage.addChild(cont);
+      const pool=new Pool(cont,tex.glow,MAX_P);
+
+      // Rim
+      const rim=new PIXI.Sprite(tex.glow);rim.anchor.set(.5);rim.x=CX;rim.y=CY+5;
+      rim.scale.set(.8);rim.alpha=.08;rim.blendMode=PIXI.BLEND_MODES.ADD;rim.tint=S.flames_cS;
+      app.stage.addChild(rim);
+
+      // Character
+      const cTex=await new Promise(res=>{
+        const img=new Image();
+        img.onload=()=>{res(PIXI.Texture.from(img));};
+        img.onerror=()=>{const g=new PIXI.Graphics();g.beginFill(0xBBBBCC,.8);g.drawRoundedRect(-30,-60,60,120,12);g.endFill();res(app.renderer.generateTexture(g));};
+        img.src=CHAR_IMG;
+      });
+      const char=new PIXI.Sprite(cTex);char.anchor.set(.5);char.x=CX;char.y=CY;
+      const charH=210;char.scale.set(charH/cTex.height);
+      app.stage.addChild(char);
+
+      const acc={};for(const k of ENT) acc[k]=0;
+      function emit(bk){
+        if(pool.cnt>=MAX_P) return;
+        const p=pool.get();if(!p)return;
+        p.active=true;p.life=0;
+        // Apply hue shift to colors
+        p.cS=hueShiftHex(S[bk+'_cS'], G.hue);
+        p.cE=hueShiftHex(S[bk+'_cE'], G.hue);
+        p.beh=bk;
+        // Per-entity speed × global movement
+        p.spdMul=(S[bk+'_spd']||1)*G.movement;
+        p.sizeMul=S[bk+'_size']||1;
+        p.angleCfg=S[bk+'_angle'];
+        const texKey=S[bk+'_tex']||TX[bk];
+        p.sprite.texture=tex[texKey]||tex.glow;p.sprite.visible=true;
+        try{Beh[bk].init(p);}catch(_){Beh.sparkle.init(p);}
+        p.scaleMax*=p.sizeMul;
+      }
+
+      let elapsed=0,fc=0;
+      app.ticker.add(()=>{
+        try{
+          const dt=min(app.ticker.deltaMS/1000,.1);elapsed+=dt;
+
+          // Apply blend mode from AI
+          cont.blendMode=G.blendMode==='normal'?PIXI.BLEND_MODES.NORMAL:PIXI.BLEND_MODES.ADD;
+
+          // Emit with density multiplier
+          for(const k of ENT){
+            if(S[k]<=0)continue;
+            acc[k]+=dt*(S[k]/(AL[k]||3))*G.density;
+            while(acc[k]>=1){emit(k);acc[k]-=1;}
+          }
+          for(let i=0;i<pool.n;i++){
+            const p=pool.a[i];if(!p.active)continue;
+            p.life+=dt;if(p.life>=p.maxLife){pool.free(p);continue;}
+            try{Beh[p.beh].update(p,dt,elapsed,p.spdMul);}catch(_){pool.free(p);continue;}
+            p.sprite.x=p.x;p.sprite.y=p.y;
+          }
+
+          // Glow: controls rim light + ambient intensity
+          const hb=pulse(elapsed);
+          let rimBest='flames',rimN=0;
+          for(const k of ENT)if(S[k]>rimN){rimN=S[k];rimBest=k;}
+          rim.tint=hueShiftHex(S[rimBest+'_cS'], G.hue);
+          const glowI=G.glow;
+          rim.alpha=(.03+.04*hb)*glowI*2;
+          rim.scale.set((.7+.1*hb)*(0.8+glowI*0.4));
+          rim.visible=glowI>0.05;
+
+          fc++;if(fc%15===0)fpsEl.textContent=round(app.ticker.FPS)+' FPS';
+        }catch(e){console.error('[Aura]',e);}
+      });
+      loadEl.classList.add('hidden');
+    }catch(err){
+      console.error('[Aura]',err);errEl.style.display='block';loadEl.style.display='none';
+    }
+  })();
+  </script>
+</body>
+</html>
