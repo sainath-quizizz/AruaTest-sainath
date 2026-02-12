@@ -194,10 +194,13 @@ class Particle {
             this.vx = random(vxRange[0], vxRange[1]);
             this.vy = random(vyRange[0], vyRange[1]);
 
-            // Force upward drift unless movement is explicitly downward
-            const downwardTypes = ['rain', 'bounce'];
-            if (!downwardTypes.includes(this.entity.movement) && this.vy > 0) {
-                this.vy = -Math.abs(this.vy);
+            // Force upward drift for string presets (skip for custom movement objects)
+            const mov = this.entity.movement;
+            if (typeof mov === 'string') {
+                const downwardTypes = ['rain', 'bounce'];
+                if (!downwardTypes.includes(mov) && this.vy > 0) {
+                    this.vy = -Math.abs(this.vy);
+                }
             }
 
             this.x = centerX + random(-110, 110);
@@ -398,67 +401,135 @@ class Particle {
         const movement = this.entity?.movement || 'float';
         const centerX = this.w / 2;
         const centerY = this.h * 0.58;
-        switch (movement) {
-            case 'float':
-                this.x += Math.sin(this.movementPhase) * 0.5;
-                break;
-            case 'zigzag':
-                this.x += Math.sin(this.movementPhase * 2.5) * 1.8;
-                break;
-            case 'orbit':
-                this.x += Math.sin(this.movementPhase) * 2;
-                this.y += Math.cos(this.movementPhase) * 0.5;
-                break;
-            case 'rise':
-                this.vy -= 0.01;
-                this.x += Math.sin(this.movementPhase * 0.8) * 0.3;
-                break;
-            case 'wander':
-                this.vx += random(-0.1, 0.1);
-                this.vy += random(-0.1, 0.1);
-                break;
-            case 'spiral': {
-                const spiralR = (1 - this.life) * 3;
-                this.x += Math.cos(this.movementPhase * 2) * spiralR;
-                this.y += Math.sin(this.movementPhase * 2) * spiralR;
-                break;
+
+        // Custom movement object from AI
+        if (typeof movement === 'object') {
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+            const m = movement;
+
+            // Gravity: vertical acceleration (negative = up)
+            if (m.gravity) this.vy += clamp(m.gravity, -0.15, 0.15);
+
+            // Friction: velocity damping
+            if (m.friction) {
+                const f = clamp(m.friction, 0.9, 1.0);
+                this.vx *= f;
+                this.vy *= f;
             }
-            case 'rain':
-                this.x += Math.sin(this.movementPhase * 0.5) * 1.2;
-                this.vy += 0.03;
-                break;
-            case 'explode':
-                this.vx *= 0.97;
-                this.vy *= 0.97;
-                break;
-            case 'swarm':
-                this.vx += (centerX - this.x) * 0.002;
-                this.vy += (centerY - this.y) * 0.002;
-                break;
-            case 'bounce':
-                this.vy += 0.08;
-                if (this.y > this.h * 0.75) {
-                    this.y = this.h * 0.75;
-                    this.vy *= -0.6;
+
+            // Wave: sine oscillation on an axis
+            if (m.wave) {
+                const amp = clamp(m.wave.amp || 1, 0.1, 5);
+                const freq = clamp(m.wave.freq || 1, 0.1, 5);
+                const waveVal = Math.sin(this.movementPhase * freq) * amp;
+                if (m.wave.axis === 'y') this.y += waveVal;
+                else if (m.wave.axis === 'both') { this.x += waveVal; this.y += Math.cos(this.movementPhase * freq) * amp * 0.5; }
+                else this.x += waveVal;
+            }
+
+            // Attract: pull toward center
+            if (m.attract) {
+                const a = clamp(m.attract, -0.01, 0.01);
+                this.vx += (centerX - this.x) * a;
+                this.vy += (centerY - this.y) * a;
+            }
+
+            // Spin: circular motion overlay
+            if (m.spin) {
+                const sp = clamp(m.spin, -3, 3);
+                this.x += Math.cos(this.movementPhase * sp) * 1.5;
+                this.y += Math.sin(this.movementPhase * sp) * 1.5;
+            }
+
+            // Jitter: random noise
+            if (m.jitter) {
+                const j = clamp(m.jitter, 0, 0.5);
+                this.vx += random(-j, j);
+                this.vy += random(-j, j);
+            }
+
+            // Bounce: floor collision
+            if (m.bounce) {
+                const floor = this.h * (clamp(m.bounce.floor || 0.75, 0.5, 0.9));
+                if (this.y > floor) {
+                    this.y = floor;
+                    this.vy *= -(clamp(m.bounce.elasticity || 0.6, 0.1, 0.9));
                 }
-                break;
-            case 'pulse': {
-                const dx = this.x - centerX;
-                const dy = this.y - centerY;
-                const pulseScale = Math.sin(this.movementPhase * 2) * 0.02;
-                this.x += dx * pulseScale;
-                this.y += dy * pulseScale;
-                break;
             }
-            case 'vortex': {
-                const vdx = centerX - this.x;
-                const vdy = centerY - this.y;
-                const dist = Math.sqrt(vdx * vdx + vdy * vdy) || 1;
-                this.vx += (vdy / dist) * 0.3;
-                this.vy += (-vdx / dist) * 0.3;
-                this.vx += vdx * 0.001;
-                this.vy += vdy * 0.001;
-                break;
+
+            // Scale: particle size change over time
+            if (m.scale) {
+                this.size *= clamp(m.scale, 0.95, 1.05);
+            }
+
+            // Speed clamp to prevent runaways
+            this.vx = clamp(this.vx, -8, 8);
+            this.vy = clamp(this.vy, -8, 8);
+
+        } else {
+            // Preset movement strings
+            switch (movement) {
+                case 'float':
+                    this.x += Math.sin(this.movementPhase) * 0.5;
+                    break;
+                case 'zigzag':
+                    this.x += Math.sin(this.movementPhase * 2.5) * 1.8;
+                    break;
+                case 'orbit':
+                    this.x += Math.sin(this.movementPhase) * 2;
+                    this.y += Math.cos(this.movementPhase) * 0.5;
+                    break;
+                case 'rise':
+                    this.vy -= 0.01;
+                    this.x += Math.sin(this.movementPhase * 0.8) * 0.3;
+                    break;
+                case 'wander':
+                    this.vx += random(-0.1, 0.1);
+                    this.vy += random(-0.1, 0.1);
+                    break;
+                case 'spiral': {
+                    const spiralR = (1 - this.life) * 3;
+                    this.x += Math.cos(this.movementPhase * 2) * spiralR;
+                    this.y += Math.sin(this.movementPhase * 2) * spiralR;
+                    break;
+                }
+                case 'rain':
+                    this.x += Math.sin(this.movementPhase * 0.5) * 1.2;
+                    this.vy += 0.03;
+                    break;
+                case 'explode':
+                    this.vx *= 0.97;
+                    this.vy *= 0.97;
+                    break;
+                case 'swarm':
+                    this.vx += (centerX - this.x) * 0.002;
+                    this.vy += (centerY - this.y) * 0.002;
+                    break;
+                case 'bounce':
+                    this.vy += 0.08;
+                    if (this.y > this.h * 0.75) {
+                        this.y = this.h * 0.75;
+                        this.vy *= -0.6;
+                    }
+                    break;
+                case 'pulse': {
+                    const dx = this.x - centerX;
+                    const dy = this.y - centerY;
+                    const pulseScale = Math.sin(this.movementPhase * 2) * 0.02;
+                    this.x += dx * pulseScale;
+                    this.y += dy * pulseScale;
+                    break;
+                }
+                case 'vortex': {
+                    const vdx = centerX - this.x;
+                    const vdy = centerY - this.y;
+                    const dist = Math.sqrt(vdx * vdx + vdy * vdy) || 1;
+                    this.vx += (vdy / dist) * 0.3;
+                    this.vy += (-vdx / dist) * 0.3;
+                    this.vx += vdx * 0.001;
+                    this.vy += vdy * 0.001;
+                    break;
+                }
             }
         }
 
@@ -670,7 +741,7 @@ Output JSON ONLY. No markdown. No backticks. No comments. Schema:
       "weight": number (relative spawn probability, e.g. 1),
       "size": [minSize, maxSize] (e.g. [12, 20]),
       "speed": { "vx": [min, max], "vy": [min, max] },
-      "movement": "float" | "zigzag" | "orbit" | "rise" | "wander" | "spiral" | "rain" | "explode" | "swarm" | "bounce" | "pulse" | "vortex",
+      "movement": STRING_PRESET | CUSTOM_OBJECT (see below),
       "shapes": [
         { "type": "circle", "cx": 0, "cy": 0, "r": 0.5, "fill": "#hex" },
         { "type": "ellipse", "cx": 0, "cy": 0, "rx": 0.3, "ry": 0.2, "fill": "#hex" },
@@ -686,19 +757,30 @@ Output JSON ONLY. No markdown. No backticks. No comments. Schema:
 
 Arc angles are in radians (0 = right, Math.PI/2 = down, Math.PI = left, Math.PI*1.5 = up). Use arc for smiles, crescents, eyebrows, curved mouths. Use polygon for any n-sided shape (stars, pentagons, hexagons, crowns, etc).
 
-Movement types:
-- float: gentle side-to-side drift (default, good for most)
-- zigzag: sharp side-to-side motion (bees, lightning bugs)
-- orbit: circular/elliptical path (satellites, magic)
-- rise: accelerates upward with slight sway (smoke, spirits, fire)
-- wander: random walk in all directions (bugs, fireflies)
-- spiral: spirals outward from spawn point (magic portals, energy)
-- rain: falls down with lateral drift (rain, snow, falling leaves)
-- explode: bursts outward then decelerates (explosions, fireworks)
-- swarm: gravitates toward center (bees, fish schools, magnetic)
-- bounce: falls with gravity, bounces off floor (bouncy balls, slime)
-- pulse: breathes in/out from center (heartbeat, aura pulse)
-- vortex: swirls in circular pull toward center (whirlpool, tornado)
+MOVEMENT — use a string preset OR a custom object:
+
+String presets (simple, reliable):
+"float" | "zigzag" | "orbit" | "rise" | "wander" | "spiral" | "rain" | "explode" | "swarm" | "bounce" | "pulse" | "vortex"
+
+Custom movement object (for unique patterns — combine any of these properties):
+{
+  "gravity": number (-0.1 to 0.1, negative=up, positive=down),
+  "friction": number (0.9 to 1.0, velocity damping per frame. 0.95=fast slowdown, 0.99=gentle),
+  "wave": { "axis": "x"|"y"|"both", "amp": number (0.1-4), "freq": number (0.1-4) },
+  "attract": number (-0.005 to 0.005, pull toward center. negative=repel),
+  "spin": number (-2 to 2, circular motion overlay speed),
+  "jitter": number (0-0.3, random noise),
+  "bounce": { "floor": number (0.5-0.9, screen position), "elasticity": number (0.1-0.9) },
+  "scale": number (0.97-1.03, size change per frame. <1=shrink, >1=grow)
+}
+
+Example custom: a flame that rises, wobbles, and shrinks:
+"movement": { "gravity": -0.03, "wave": { "axis": "x", "amp": 1.2, "freq": 1.5 }, "scale": 0.99 }
+
+Example custom: an orb that swirls inward and slows:
+"movement": { "spin": 1.5, "attract": 0.003, "friction": 0.995 }
+
+Use presets for simple cases. Use custom objects when the theme needs unique physics that no preset covers. You can combine any properties freely.
 Shapes also support optional "stroke" and "strokeWidth" on circle/ellipse/rect/triangle/arc/polygon.
 
 EXAMPLE for "super saiyan" aura — golden flame wisp entity:
