@@ -1,0 +1,75 @@
+| **Icon Name (JS import)**      | **Free Icon Link (if exists)**                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `faAbacus`                     | (No free version found)                                                                                                                                 |
+| `faAddressBook`                | [https://fontawesome.com/icons/address-book?style=solid](https://fontawesome.com/icons/address-book?style=solid) ([fontawesome.com][1])                 |
+| `faArrowDown`                  | [https://fontawesome.com/icons/arrow-down?style=solid](https://fontawesome.com/icons/arrow-down?style=solid) ([fontawesome.com][2])                     |
+| `faArrowRight`                 | [https://fontawesome.com/icons/arrow-right?style=solid](https://fontawesome.com/icons/arrow-right?style=solid) ([fontawesome.com][2])                   |
+| `faArrowUp`                    | [https://fontawesome.com/icons/arrow-up?style=solid](https://fontawesome.com/icons/arrow-up?style=solid) ([fontawesome.com][2])                         |
+| `faBalanceScale`               | [https://fontawesome.com/icons/balance-scale?style=solid](https://fontawesome.com/icons/balance-scale?style=solid) ([fontawesome.com][2])               |
+| `faBatteryFull`                | [https://fontawesome.com/icons/battery-full?style=solid](https://fontawesome.com/icons/battery-full?style=solid) ([fontawesome.com][2])                 |
+| `faBookOpen`                   | [https://fontawesome.com/icons/book-open?style=solid](https://fontawesome.com/icons/book-open?style=solid) ([fontawesome.com][2])                       |
+| `faBookReader`                 | [https://fontawesome.com/icons/book-reader?style=solid](https://fontawesome.com/icons/book-reader?style=solid) ([fontawesome.com][2])                   |
+| `faBook`                       | [https://fontawesome.com/icons/book?style=solid](https://fontawesome.com/icons/book?style=solid) ([fontawesome.com][2])                                 |
+| `faBraille`                    | [https://fontawesome.com/icons/braille?style=solid](https://fontawesome.com/icons/braille?style=solid) ([fontawesome.com][2])                           |
+| `faCalculator`                 | [https://fontawesome.com/icons/calculator?style=solid](https://fontawesome.com/icons/calculator?style=solid) ([fontawesome.com][2])                     |
+| `faChartBar`                   | [https://fontawesome.com/icons/chart-bar?style=solid](https://fontawesome.com/icons/chart-bar?style=solid) ([fontawesome.com][2])                       |
+| `faChevronDown`                | [https://fontawesome.com/icons/chevron-down?style=solid](https://fontawesome.com/icons/chevron-down?style=solid) ([fontawesome.com][2])                 |
+| `faChevronUp`                  | [https://fontawesome.com/icons/chevron-up?style=solid](https://fontawesome.com/icons/chevron-up?style=solid) ([fontawesome.com][2])                     |
+| `faCircle`                     | [https://fontawesome.com/icons/circle?style=solid](https://fontawesome.com/icons/circle?style=solid) ([fontawesome.com][2])                             |
+| `faClipboard`                  | [https://fontawesome.com/icons/clipboard?style=solid](https://fontawesome.com/icons/clipboard?style=solid) ([fontawesome.com][2])                       |
+| `faCoins`                      | [https://fontawesome.com/icons/coins?style=solid](https://fontawesome.com/icons/coins?style=solid) ([fontawesome.com][2])                               |
+| `faComments`                   | [https://fontawesome.com/icons/comments?style=solid](https://fontawesome.com/icons/comments?style=solid) ([fontawesome.com][2])                         |
+| `faCube`                       | [https://fontawesome.com/icons/cube?style=solid](https://fontawesome.com/icons/cube?style=solid) ([fontawesome.com][2])                                 |
+| `faDna`                        | [https://fontawesome.com/icons/dna?style=solid](https://fontawesome.com/icons/dna?style=solid) ([fontawesome.com][2])                                   |
+| `faDollarSign`                 | [https://fontawesome.com/icons/dollar-sign?style=solid](https://fontawesome.com/icons/dollar-sign?style=solid) ([fontawesome.com][2])                   |
+| `faEarthAmericas`              | [https://fontawesome.com/icons/earth-americas?style=solid](https://fontawesome.com/icons/earth-americas?style=solid) ([fontawesome.com][2])             |
+| `faExclamationTriangle`        | [https://fontawesome.com/icons/exclamation-triangle?style=solid](https://fontawesome.com/icons/exclamation-triangle?style=solid) ([fontawesome.com][2]) |
+| `faFlag`                       | [https://fontawesome.com/icons/flag?style=solid](https://fontawesome.com/icons/flag?style=solid) ([fontawesome.com][2])                                 |
+| `faFlask`                      | [https://fontawesome.com/icons/flask?style=solid](https://fontawesome.com/icons/flask?style=solid) ([fontawesome.com][2])                               |
+| `faGavel`                      | [https://fontawesome.com/icons/gavel?style=solid](https://fontawesome.com/icons/gavel?style=solid) ([fontawesome.com][2])                               |
+| `faGear`                       | [https://fontawesome.com/icons/gear?style=solid](https://fontawesome.com/icons/gear?style=solid) ([fontawesome.com][2])                                 |
+| `faGlobeAmericas`              | [https://fontawesome.com/icons/globe-americas?style=solid](https://fontawesome.com/icons/globe-americas?style=solid) ([fontawesome.com][2])             |
+| `faGraduationCap`              | [https://fontawesome.com/icons/graduation-cap?style=solid](https://fontawesome.com/icons/graduation-cap?style=solid) ([fontawesome.com][2])             |
+| `faHandHoldingHeart`           | [https://fontawesome.com/icons/hand-holding-heart?style=solid](https://fontawesome.com/icons/hand-holding-heart?style=solid) ([fontawesome.com][2])     |
+| `faHardHat`                    | [https://fontawesome.com/icons/hard-hat?style=solid](https://fontawesome.com/icons/hard-hat?style=solid) ([fontawesome.com][2])                         |
+| `faHashtag`                    | [https://fontawesome.com/icons/hashtag?style=solid](https://fontawesome.com/icons/hashtag?style=solid) ([fontawesome.com][2])                           |
+| `faHeart`                      | [https://fontawesome.com/icons/heart?style=solid](https://fontawesome.com/icons/heart?style=solid) ([fontawesome.com][3])                               |
+| `faHome`                       | [https://fontawesome.com/icons/home?style=solid](https://fontawesome.com/icons/home?style=solid) ([fontawesome.com][2])                                 |
+| `faInfoCircle`                 | [https://fontawesome.com/icons/info-circle?style=solid](https://fontawesome.com/icons/info-circle?style=solid) ([fontawesome.com][2])                   |
+| `faLightbulb`                  | [https://fontawesome.com/icons/lightbulb?style=solid](https://fontawesome.com/icons/lightbulb?style=solid) ([fontawesome.com][4])                       |
+| `faLink`                       | [https://fontawesome.com/icons/link?style=solid](https://fontawesome.com/icons/link?style=solid) ([fontawesome.com][2])                                 |
+| `faListOl`                     | [https://fontawesome.com/icons/list-ol?style=solid](https://fontawesome.com/icons/list-ol?style=solid) ([fontawesome.com][2])                           |
+| `faMedal`                      | [https://fontawesome.com/icons/medal?style=solid](https://fontawesome.com/icons/medal?style=solid) ([fontawesome.com][2])                               |
+| `faMicrophone`                 | [https://fontawesome.com/icons/microphone?style=solid](https://fontawesome.com/icons/microphone?style=solid) ([fontawesome.com][2])                     |
+| `faMicroscope`                 | [https://fontawesome.com/icons/microscope?style=solid](https://fontawesome.com/icons/microscope?style=solid) ([fontawesome.com][2])                     |
+| `faMoneyBillWave`              | [https://fontawesome.com/icons/money-bill-wave?style=solid](https://fontawesome.com/icons/money-bill-wave?style=solid) ([fontawesome.com][2])           |
+| `faNewspaper`                  | [https://fontawesome.com/icons/newspaper?style=solid](https://fontawesome.com/icons/newspaper?style=solid) ([fontawesome.com][2])                       |
+| `faPalette`                    | [https://fontawesome.com/icons/palette?style=solid](https://fontawesome.com/icons/palette?style=solid) ([fontawesome.com][2])                           |
+| `faPencil`                     | [https://fontawesome.com/icons/pencil?style=solid](https://fontawesome.com/icons/pencil?style=solid) ([fontawesome.com][2])                             |
+| `faPizzaSlice`                 | [https://fontawesome.com/icons/pizza-slice?style=solid](https://fontawesome.com/icons/pizza-slice?style=solid) ([fontawesome.com][2])                   |
+| `faPlusSquare`                 | [https://fontawesome.com/icons/plus-square?style=solid](https://fontawesome.com/icons/plus-square?style=solid) ([fontawesome.com][2])                   |
+| `faQuestion`                   | [https://fontawesome.com/icons/question?style=solid](https://fontawesome.com/icons/question?style=solid) ([fontawesome.com][2])                         |
+| `faRocket`                     | [https://fontawesome.com/icons/rocket?style=solid](https://fontawesome.com/icons/rocket?style=solid) ([fontawesome.com][2])                             |
+| `faSearchMinus`                | [https://fontawesome.com/icons/search-minus?style=solid](https://fontawesome.com/icons/search-minus?style=solid) ([fontawesome.com][2])                 |
+| `faSearchPlus`                 | [https://fontawesome.com/icons/search-plus?style=solid](https://fontawesome.com/icons/search-plus?style=solid) ([fontawesome.com][2])                   |
+| `faServer`                     | [https://fontawesome.com/icons/server?style=solid](https://fontawesome.com/icons/server?style=solid) ([fontawesome.com][2])                             |
+| `faSitemap`                    | [https://fontawesome.com/icons/sitemap?style=solid](https://fontawesome.com/icons/sitemap?style=solid) ([fontawesome.com][2])                           |
+| `faSlidersUp` *(as “sliders”)* | [https://fontawesome.com/icons/sliders?style=solid](https://fontawesome.com/icons/sliders?style=solid) ([fontawesome.com][2])                           |
+| `faSquareRootAlt`              | [https://fontawesome.com/icons/square-root-alt?style=solid](https://fontawesome.com/icons/square-root-alt?style=solid) ([fontawesome.com][2])           |
+| `faStethoscope`                | [https://fontawesome.com/icons/stethoscope?style=solid](https://fontawesome.com/icons/stethoscope?style=solid) ([fontawesome.com][2])                   |
+| `faStream`                     | [https://fontawesome.com/icons/stream?style=solid](https://fontawesome.com/icons/stream?style=solid) ([fontawesome.com][2])                             |
+| `faSyncAlt`                    | [https://fontawesome.com/icons/sync-alt?style=solid](https://fontawesome.com/icons/sync-alt?style=solid) ([fontawesome.com][2])                         |
+| `faTable`                      | [https://fontawesome.com/icons/table?style=solid](https://fontawesome.com/icons/table?style=solid) ([fontawesome.com][2])                               |
+| `faTachometerAlt`              | [https://fontawesome.com/icons/tachometer-alt?style=solid](https://fontawesome.com/icons/tachometer-alt?style=solid) ([fontawesome.com][2])             |
+| `faTheaterMasks`               | [https://fontawesome.com/icons/theater-masks?style=solid](https://fontawesome.com/icons/theater-masks?style=solid) ([fontawesome.com][2])               |
+| `faTh`                         | [https://fontawesome.com/icons/th?style=solid](https://fontawesome.com/icons/th?style=solid) ([fontawesome.com][2])                                     |
+| `faTrash`                      | [https://fontawesome.com/icons/trash?style=solid](https://fontawesome.com/icons/trash?style=solid) ([fontawesome.com][2])                               |
+| `faTrophy`                     | [https://fontawesome.com/icons/trophy?style=solid](https://fontawesome.com/icons/trophy?style=solid) ([fontawesome.com][5])                             |
+| `faUnlock`                     | [https://fontawesome.com/icons/unlock?style=solid](https://fontawesome.com/icons/unlock?style=solid) ([fontawesome.com][2])                             |
+| `faUsers`                      | [https://fontawesome.com/icons/users?style=solid](https://fontawesome.com/icons/users?style=solid) ([fontawesome.com][2])                               |
+
+[1]: https://fontawesome.com/icons/address-book?utm_source=chatgpt.com "Address Book Icon"
+[2]: https://fontawesome.com/icons?utm_source=chatgpt.com "Find Icons with the Perfect Look & Feel"
+[3]: https://fontawesome.com/icons/heart?utm_source=chatgpt.com "Heart Icon"
+[4]: https://fontawesome.com/icons/lightbulb?utm_source=chatgpt.com "Lightbulb Icon"
+[5]: https://fontawesome.com/icons/trophy?utm_source=chatgpt.com "Trophy Icon"
