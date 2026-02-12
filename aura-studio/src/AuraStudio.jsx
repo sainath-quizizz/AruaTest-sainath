@@ -87,24 +87,23 @@ const AURA_COLORS = {
 
 const random = (min, max) => Math.random() * (max - min) + min;
 
-// --- CLAUDE API HELPERS ---
-const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+// --- PORTKEY + GEMINI API HELPERS ---
+const PORTKEY_URL = 'https://api.portkey.ai/v1/chat/completions';
+const PORTKEY_MODEL = '@vertex-global-region/gemini-3-pro-image-preview';
 
-async function callClaudeText(promptText) {
-  const key = localStorage.getItem('claude_api_key') || window.prompt('Enter your Anthropic API key:') || '';
-  if (key && !localStorage.getItem('claude_api_key')) localStorage.setItem('claude_api_key', key);
-  if (!key) throw new Error('No API key provided. Set it via: localStorage.setItem("claude_api_key", "your-key")');
+async function callLLMText(promptText) {
+  const key = localStorage.getItem('portkey_api_key') || window.prompt('Enter your Portkey API key:') || '';
+  if (key && !localStorage.getItem('portkey_api_key')) localStorage.setItem('portkey_api_key', key);
+  if (!key) throw new Error('No API key provided. Set it via: localStorage.setItem("portkey_api_key", "your-key")');
 
-  const response = await fetch(CLAUDE_URL, {
+  const response = await fetch(PORTKEY_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
+      'x-portkey-api-key': key,
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250929',
+      model: PORTKEY_MODEL,
       max_tokens: 4096,
       messages: [{ role: 'user', content: promptText }]
     })
@@ -112,12 +111,12 @@ async function callClaudeText(promptText) {
 
   if (!response.ok) {
     const errorBody = await response.text();
-    console.error("Claude API Error:", response.status, errorBody);
+    console.error("Portkey API Error:", response.status, errorBody);
     throw new Error(`API Error ${response.status}: ${errorBody}`);
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || "";
+  return data.choices?.[0]?.message?.content || "";
 }
 
 /* --- COMMENTED OUT: Vision API helper (used by Oracle/Scribe) ---
@@ -570,92 +569,135 @@ class Particle {
     --- END COMMENTED OUT --- */
   }
 
+  // Draws all shapes at a given scale factor
+  _drawShapes(ctx, s) {
+    for (const shape of this.entity.shapes) {
+        ctx.beginPath();
+        if (shape.fill) ctx.fillStyle = shape.fill;
+        if (shape.stroke) {
+            ctx.strokeStyle = shape.stroke;
+            ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
+        }
+
+        switch (shape.type) {
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.r || 0.1) * s, 0, Math.PI * 2);
+                if (shape.fill) ctx.fill();
+                if (shape.stroke) ctx.stroke();
+                break;
+            case 'ellipse':
+                ctx.beginPath();
+                ctx.ellipse((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.rx || 0.1) * s, (shape.ry || 0.1) * s, 0, 0, Math.PI * 2);
+                if (shape.fill) ctx.fill();
+                if (shape.stroke) ctx.stroke();
+                break;
+            case 'rect':
+                if (shape.fill) ctx.fillRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
+                if (shape.stroke) ctx.strokeRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
+                break;
+            case 'triangle': {
+                const p = shape.points || [0, -0.3, -0.3, 0.3, 0.3, 0.3];
+                ctx.beginPath();
+                ctx.moveTo(p[0] * s, p[1] * s);
+                ctx.lineTo(p[2] * s, p[3] * s);
+                ctx.lineTo(p[4] * s, p[5] * s);
+                ctx.closePath();
+                if (shape.fill) ctx.fill();
+                if (shape.stroke) ctx.stroke();
+                break;
+            }
+            case 'line':
+                ctx.beginPath();
+                ctx.strokeStyle = shape.stroke || shape.fill || '#fff';
+                ctx.lineWidth = (shape.width || 0.02) * s;
+                ctx.moveTo((shape.x1 || 0) * s, (shape.y1 || 0) * s);
+                ctx.lineTo((shape.x2 || 0) * s, (shape.y2 || 0) * s);
+                ctx.stroke();
+                break;
+            case 'arc':
+                ctx.beginPath();
+                ctx.arc(
+                    (shape.cx || 0) * s, (shape.cy || 0) * s,
+                    (shape.r || 0.2) * s,
+                    shape.startAngle || 0,
+                    shape.endAngle || Math.PI,
+                    shape.counterClockwise || false
+                );
+                if (shape.fill) { ctx.closePath(); ctx.fill(); }
+                if (shape.stroke) {
+                    ctx.strokeStyle = shape.stroke;
+                    ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
+                    ctx.stroke();
+                }
+                break;
+            case 'polygon': {
+                const pts = shape.points || [];
+                if (pts.length >= 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0] * s, pts[1] * s);
+                    for (let i = 2; i < pts.length; i += 2) {
+                        ctx.lineTo(pts[i] * s, pts[i + 1] * s);
+                    }
+                    ctx.closePath();
+                    if (shape.fill) ctx.fill();
+                    if (shape.stroke) ctx.stroke();
+                }
+                break;
+            }
+        }
+    }
+  }
+
   draw(ctx) {
     ctx.save();
 
     // --- SHAPE-BASED DRAW FOR CUSTOM ---
     if (this.type === AURA_TYPES.CUSTOM && this.customConfig && this.entity?.shapes) {
+        const style = this.entity.style || 'solid';
+        const s = this.size;
+
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation || 0);
-        ctx.globalAlpha = this.life;
-        ctx.globalCompositeOperation = 'source-over';
 
-        const s = this.size;
-        for (const shape of this.entity.shapes) {
-            ctx.beginPath();
-            if (shape.fill) ctx.fillStyle = shape.fill;
-            if (shape.stroke) {
-                ctx.strokeStyle = shape.stroke;
-                ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
-            }
+        if (style === 'smoke') {
+            // Smoke: soft, additive, layered for thick wispy look
+            ctx.globalCompositeOperation = 'lighter';
 
-            switch (shape.type) {
-                case 'circle':
-                    ctx.beginPath();
-                    ctx.arc((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.r || 0.1) * s, 0, Math.PI * 2);
-                    if (shape.fill) ctx.fill();
-                    if (shape.stroke) ctx.stroke();
-                    break;
-                case 'ellipse':
-                    ctx.beginPath();
-                    ctx.ellipse((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.rx || 0.1) * s, (shape.ry || 0.1) * s, 0, 0, Math.PI * 2);
-                    if (shape.fill) ctx.fill();
-                    if (shape.stroke) ctx.stroke();
-                    break;
-                case 'rect':
-                    if (shape.fill) ctx.fillRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
-                    if (shape.stroke) ctx.strokeRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
-                    break;
-                case 'triangle': {
-                    const p = shape.points || [0, -0.3, -0.3, 0.3, 0.3, 0.3];
-                    ctx.beginPath();
-                    ctx.moveTo(p[0] * s, p[1] * s);
-                    ctx.lineTo(p[2] * s, p[3] * s);
-                    ctx.lineTo(p[4] * s, p[5] * s);
-                    ctx.closePath();
-                    if (shape.fill) ctx.fill();
-                    if (shape.stroke) ctx.stroke();
-                    break;
-                }
-                case 'line':
-                    ctx.beginPath();
-                    ctx.strokeStyle = shape.stroke || shape.fill || '#fff';
-                    ctx.lineWidth = (shape.width || 0.02) * s;
-                    ctx.moveTo((shape.x1 || 0) * s, (shape.y1 || 0) * s);
-                    ctx.lineTo((shape.x2 || 0) * s, (shape.y2 || 0) * s);
-                    ctx.stroke();
-                    break;
-                case 'arc':
-                    ctx.beginPath();
-                    ctx.arc(
-                        (shape.cx || 0) * s, (shape.cy || 0) * s,
-                        (shape.r || 0.2) * s,
-                        shape.startAngle || 0,
-                        shape.endAngle || Math.PI,
-                        shape.counterClockwise || false
-                    );
-                    if (shape.fill) { ctx.closePath(); ctx.fill(); }
-                    if (shape.stroke) {
-                        ctx.strokeStyle = shape.stroke;
-                        ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
-                        ctx.stroke();
-                    }
-                    break;
-                case 'polygon': {
-                    const pts = shape.points || [];
-                    if (pts.length >= 4) {
-                        ctx.beginPath();
-                        ctx.moveTo(pts[0] * s, pts[1] * s);
-                        for (let i = 2; i < pts.length; i += 2) {
-                            ctx.lineTo(pts[i] * s, pts[i + 1] * s);
-                        }
-                        ctx.closePath();
-                        if (shape.fill) ctx.fill();
-                        if (shape.stroke) ctx.stroke();
-                    }
-                    break;
-                }
-            }
+            // Outer haze (large, diffuse)
+            ctx.globalAlpha = this.life * 0.3;
+            this._drawShapes(ctx, s * 2);
+
+            // Mid layer (medium spread)
+            ctx.globalAlpha = this.life * 0.45;
+            this._drawShapes(ctx, s * 1.4);
+
+            // Inner core (dense center)
+            ctx.globalAlpha = this.life * 0.7;
+            this._drawShapes(ctx, s);
+
+        } else if (style === 'glow') {
+            // Glow: bright center with soft radiant edge
+            ctx.globalCompositeOperation = 'lighter';
+
+            // Outer glow halo (large, faint)
+            ctx.globalAlpha = this.life * 0.15;
+            this._drawShapes(ctx, s * 2);
+
+            // Mid glow
+            ctx.globalAlpha = this.life * 0.35;
+            this._drawShapes(ctx, s * 1.3);
+
+            // Bright core
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = this.life * 0.9;
+            this._drawShapes(ctx, s);
+
+        } else {
+            // Solid: crisp, opaque — default for characters
+            ctx.globalAlpha = this.life;
+            ctx.globalCompositeOperation = 'source-over';
+            this._drawShapes(ctx, s);
         }
 
         ctx.restore();
@@ -734,13 +776,14 @@ Output JSON ONLY. No markdown. No backticks. No comments. Schema:
   "name": "string",
   "description": "string (max 10 words)",
   "glowColor": "#hex (primary theme color for avatar glow)",
-  "density": number (25-50, total particle count),
+  "density": number (you can put any number you want, even multiple),
   "background": "clear" | "dark-fade" | "black-fade",
   "entities": [
     {
       "weight": number (relative spawn probability, e.g. 1),
       "size": [minSize, maxSize] (e.g. [12, 20]),
       "speed": { "vx": [min, max], "vy": [min, max] },
+      "style": "solid" | "smoke" | "glow" (rendering style, see below),
       "movement": STRING_PRESET | CUSTOM_OBJECT (see below),
       "shapes": [
         { "type": "circle", "cx": 0, "cy": 0, "r": 0.5, "fill": "#hex" },
@@ -756,6 +799,16 @@ Output JSON ONLY. No markdown. No backticks. No comments. Schema:
 }
 
 Arc angles are in radians (0 = right, Math.PI/2 = down, Math.PI = left, Math.PI*1.5 = up). Use arc for smiles, crescents, eyebrows, curved mouths. Use polygon for any n-sided shape (stars, pentagons, hexagons, crowns, etc).
+
+RENDERING STYLES — each entity picks one:
+- "solid": Crisp, opaque shapes. ALWAYS use for characters/objects with faces and details. Default.
+- "smoke": Soft, wispy, semi-transparent with additive blending. Use for: fire, fog, mist, exhaust, clouds, steam, ghostly effects.
+- "glow": Bright center with radiant halo edge. Use for: energy orbs, magic, lightning, stars, neon, plasma, holy light.
+
+You can MIX styles across entities in the same aura! Example for "super saiyan":
+- Flame wisps → "smoke" (soft rising flames)
+- Energy orbs → "glow" (bright pulsing orbs)
+- Electric sparks → "solid" (crisp lightning bolts)
 
 MOVEMENT — use a string preset OR a custom object:
 
@@ -783,22 +836,28 @@ Example custom: an orb that swirls inward and slows:
 Use presets for simple cases. Use custom objects when the theme needs unique physics that no preset covers. You can combine any properties freely.
 Shapes also support optional "stroke" and "strokeWidth" on circle/ellipse/rect/triangle/arc/polygon.
 
-EXAMPLE for "super saiyan" aura — golden flame wisp entity:
-{"weight":2,"size":[15,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"movement":"rise","shapes":[
+EXAMPLE for "super saiyan" aura — golden flame wisp (smoke style):
+{"weight":2,"size":[15,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[
 {"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},
 {"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},
 {"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFFF80"}
 ]}
 
-EXAMPLE for "super saiyan" aura — electric spark entity:
-{"weight":1,"size":[8,14],"speed":{"vx":[-2,2],"vy":[-2,1]},"movement":"zigzag","shapes":[
+EXAMPLE for "super saiyan" aura — energy orb (glow style):
+{"weight":1,"size":[6,12],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[
+{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},
+{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#FFFFCC"}
+]}
+
+EXAMPLE for "super saiyan" aura — electric spark (solid style):
+{"weight":1,"size":[8,14],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[
 {"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},
 {"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFFF00","width":0.06},
 {"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFFFAA","width":0.04}
 ]}`;
 
     try {
-      const text = await callClaudeText(systemPrompt);
+      const text = await callLLMText(systemPrompt);
       if (!text) throw new Error('No response');
       const cleanJson = text.replace(/```json|```/g, '').trim();
       const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
