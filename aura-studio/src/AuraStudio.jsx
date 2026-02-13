@@ -5,26 +5,44 @@ import {
   Sparkles,
   ImagePlus,
   Wand2,
-  X
+  X,
+  Flame,
+  Wind,
+  Zap,
+  CloudFog
 } from 'lucide-react';
 
 const AURA_TYPES = {
   NONE: 'none',
+  FIRE: 'fire',
+  WIND: 'wind',
+  ELECTRIC: 'electric',
+  COSMIC: 'cosmic',
+  EXHAUST: 'exhaust',
   CUSTOM: 'custom'
 };
 
 const AURA_COLORS = {
   [AURA_TYPES.NONE]: 'rgba(0,0,0,0)',
+  [AURA_TYPES.FIRE]: '#ff5500',
+  [AURA_TYPES.WIND]: '#00ffcc',
+  [AURA_TYPES.ELECTRIC]: '#aa00ff',
+  [AURA_TYPES.COSMIC]: '#6366f1',
+  [AURA_TYPES.EXHAUST]: '#94a3b8',
   [AURA_TYPES.CUSTOM]: '#ffffff'
 };
 
 const random = (min, max) => Math.random() * (max - min) + min;
-
+const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
 const PORTKEY_URL = 'https://api.portkey.ai/v1/chat/completions';
-const PORTKEY_MODEL = '@vertex-global-region/gemini-3-pro-preview';
+// for flash - use this model
+// const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
+// const PORTKEY_MODEL = '@vertex-global-region/gemini-3-pro-preview';
+// const PORTKEY_MODEL = '@content-rnd-gem-565e6c/gemini-2.5-flash-lite';
+// const PORTKEY_MODEL = '@content-rnd-gem-565e6c/gemini-2.5-flash';
 
 async function callLLMText(promptText) {
-  const key = localStorage.getItem('portkey_api_key') || window.prompt('Enter your Portkey API key:') || '';
+  const key = "7uuFM238TMkz2A0I+VvMfoZVm9l+"
   if (key && !localStorage.getItem('portkey_api_key')) localStorage.setItem('portkey_api_key', key);
   if (!key) throw new Error('No API key provided. Set it via: localStorage.setItem("portkey_api_key", "your-key")');
 
@@ -33,10 +51,12 @@ async function callLLMText(promptText) {
     headers: {
       'Content-Type': 'application/json',
       'x-portkey-api-key': key,
+      'x-portkey-provider': 'openai',
     },
     body: JSON.stringify({
       model: PORTKEY_MODEL,
-      max_tokens: 4096,
+      max_tokens: 32384,
+      temperature: 0,
       messages: [{ role: 'user', content: promptText }]
     })
   });
@@ -117,6 +137,92 @@ class Particle {
         
         this.movementPhase = random(0, Math.PI * 2);
       }
+    }
+
+    // --- PRESET AURA TYPES ---
+    switch (this.type) {
+      case AURA_TYPES.FIRE:
+        this.x = centerX + random(-60, 60);
+        this.y = feetY + random(-10, 40);
+        this.vx = (this.x - centerX) * 0.005 + random(-0.2, 0.2);
+        this.vy = random(-3.5, -1);
+        this.size = random(30, 70);
+        this.life = 1;
+        this.decay = random(0.008, 0.02);
+        this.hue = random(0, 35);
+        break;
+
+      case AURA_TYPES.WIND:
+        this.initialX = centerX;
+        this.y = feetY + random(20, 100);
+        this.vy = random(-3, -1.5);
+        this.amplitude = random(40, 90);
+        this.frequency = random(0.015, 0.03);
+        this.phase = random(0, Math.PI * 2);
+        this.x = this.initialX + Math.sin(this.y * this.frequency + this.phase) * this.amplitude;
+        this.size = random(20, 40);
+        this.life = 1;
+        this.decay = 0.008;
+        this.hue = random(150, 170);
+        break;
+
+      case AURA_TYPES.ELECTRIC: {
+        this.x = centerX + random(-80, 80);
+        this.y = feetY - random(0, 180);
+        this.points = [];
+        let curX = this.x;
+        let curY = this.y;
+        for (let i = 0; i < 5; i++) {
+          this.points.push({ x: curX, y: curY });
+          curX += random(-20, 20);
+          curY += random(-20, 20);
+        }
+        this.life = 1;
+        this.decay = random(0.02, 0.08);
+        this.size = random(1, 4);
+        this.hue = random(250, 280);
+        break;
+      }
+
+      case AURA_TYPES.COSMIC: {
+        this.isStar = false;
+        this.x = centerX;
+        this.y = this.h * 0.5;
+        const angle = random(0, Math.PI * 2);
+        const speed = random(3, 8);
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.size = random(1, 3);
+        this.life = 1;
+        this.decay = random(0.01, 0.03);
+        this.hue = random(200, 320);
+        if (this.variant > 0.8) {
+          this.vx = 0;
+          this.vy = 0;
+          this.x = centerX + random(-150, 150);
+          this.y = this.h * 0.5 + random(-150, 150);
+          this.size = random(2, 5);
+          this.decay = random(0.005, 0.01);
+          this.isStar = true;
+        }
+        break;
+      }
+
+      case AURA_TYPES.EXHAUST:
+        this.x = centerX + random(-80, 80);
+        this.y = feetY + 40;
+        this.vx = (this.x - centerX) * 0.05;
+        this.vy = random(-2, -0.5);
+        this.size = random(10, 30);
+        this.rotation = random(0, Math.PI * 2);
+        this.rotSpeed = random(-0.01, 0.01);
+        this.hue = 220;
+        this.life = 1;
+        this.decay = random(0.005, 0.02);
+        break;
+
+      default:
+        break;
     }
   }
 
@@ -278,6 +384,48 @@ class Particle {
 
       this.life -= this.decay;
       if (this.life <= 0) this.reset();
+      return;
+    }
+
+    // --- PRESET AURA TYPES ---
+    switch (this.type) {
+      case AURA_TYPES.FIRE:
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.99;
+        this.size *= 0.96;
+        this.life -= this.decay;
+        break;
+
+      case AURA_TYPES.WIND:
+        this.y += this.vy;
+        this.x = this.initialX + Math.sin(this.y * this.frequency + this.phase) * this.amplitude;
+        this.life -= this.decay;
+        break;
+
+      case AURA_TYPES.ELECTRIC:
+        this.life -= this.decay;
+        if (Math.random() > 0.8) this.reset();
+        break;
+
+      case AURA_TYPES.COSMIC:
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        break;
+
+      case AURA_TYPES.EXHAUST:
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.rotSpeed) this.rotation += this.rotSpeed;
+        this.size *= 1.02;
+        this.vx *= 0.98;
+        this.life -= this.decay;
+        break;
+    }
+
+    if (this.life <= 0) {
+      this.reset();
     }
   }
 
@@ -438,6 +586,95 @@ class Particle {
         }
         this._drawShapes(ctx, s);
       }
+    } else {
+      // --- PRESET AURA TYPES ---
+      switch (this.type) {
+        case AURA_TYPES.FIRE: {
+          ctx.globalCompositeOperation = 'screen';
+          ctx.globalAlpha = this.life * 0.8;
+          const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+          gradient.addColorStop(0, 'hsla(40, 100%, 60%, 1)');
+          gradient.addColorStop(0.5, `hsla(${this.hue}, 100%, 50%, 0.6)`);
+          gradient.addColorStop(1, 'hsla(0, 100%, 20%, 0)');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+
+        case AURA_TYPES.WIND: {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = this.life * 0.5;
+          ctx.strokeStyle = `hsla(${this.hue}, 70%, 75%, 1)`;
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(this.x, this.y);
+          const prevY = this.y + 15;
+          const prevX = this.initialX + Math.sin(prevY * this.frequency + this.phase) * this.amplitude;
+          ctx.quadraticCurveTo((this.x + prevX) / 2 + 10, (this.y + prevY) / 2, prevX, prevY);
+          ctx.stroke();
+          break;
+        }
+
+        case AURA_TYPES.ELECTRIC:
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = this.life;
+          ctx.strokeStyle = `hsla(${this.hue}, 80%, 70%, 1)`;
+          ctx.lineWidth = this.size;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = `hsla(${this.hue}, 90%, 50%, 0.8)`;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          if (this.points && this.points.length > 0) {
+            ctx.moveTo(this.points[0].x, this.points[0].y);
+            for (const p of this.points) {
+              ctx.lineTo(p.x, p.y);
+            }
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          break;
+
+        case AURA_TYPES.COSMIC:
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = this.life;
+          if (this.isStar) {
+            ctx.fillStyle = 'white';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = `hsla(${this.hue}, 80%, 60%, 1)`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * (0.5 + Math.random() * 0.5), 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.strokeStyle = `hsla(${this.hue}, 90%, 70%, 1)`;
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = `hsla(${this.hue}, 100%, 50%, 1)`;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x - this.vx * 3, this.y - this.vy * 3);
+            ctx.stroke();
+          }
+          break;
+
+        case AURA_TYPES.EXHAUST: {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.translate(this.x, this.y);
+          ctx.rotate(this.rotation || 0);
+          ctx.globalAlpha = this.life;
+          const smokeGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size);
+          smokeGrad.addColorStop(0, `hsla(${this.hue}, 10%, 80%, 0.8)`);
+          smokeGrad.addColorStop(1, `hsla(${this.hue}, 10%, 40%, 0)`);
+          ctx.fillStyle = smokeGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+      }
     }
 
     ctx.restore();
@@ -472,149 +709,67 @@ export default function AuraStudio() {
     setAiLoading(true);
     setAiMessage("The Alchemist is designing particle physics...");
 
-    const systemPrompt = `You are a particle artist for a Canvas 2D aura engine. Design floating particles that create a visual effect around a character avatar.
+    const systemPrompt = `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
 
-User Prompt: "${promptInput}"
+=== ENGINE SPEC ===
 
-WHAT TO GENERATE — read the user's prompt carefully:
-- If they name a POWER, ENERGY, or EFFECT (e.g. "super saiyan", "fire aura", "ice storm") → design the aura effect: flames, sparks, energy wisps, ice shards, etc.
-- If they name a CHARACTER or ask for characters (e.g. "floating cats", "Powerpuff Girls characters", "tiny Pikachus") → design recognizable character-shaped particles with faces and features.
-- If ambiguous, default to the AURA EFFECT interpretation.
+Coordinates: center=(0,0), range -0.5 to 0.5 relative to particle size. Negative vy = UP, positive vy = DOWN.
 
-Examples:
-- "super saiyan" → golden flame wisps (rise), electric sparks (zigzag), energy orbs (float). Effect particles, not Goku.
-- "Powerpuff Girls characters" → Blossom (pink circle face, red bow), Bubbles (blue, pigtails), Buttercup (green, short hair). Character particles.
-- "ocean" → bubbles, water droplets, foam wisps. Effect particles.
-- "floating cat faces" → cat face particles with ears, eyes, nose. Character particles.
+Shapes (layered bottom-to-top in each entity):
+circle: {type,cx,cy,r,fill}, ellipse: {type,cx,cy,rx,ry,fill}, rect: {type,x,y,w,h,fill}, triangle: {type,points:[x1,y1,x2,y2,x3,y3],fill}, line: {type,x1,y1,x2,y2,stroke,width}, arc: {type,cx,cy,r,startAngle,endAngle,fill?,stroke?}, polygon: {type,points:[...],fill}. All support optional stroke/strokeWidth.
 
-RULES:
-- All coordinates are RELATIVE to particle size. Center is (0,0). Range: -0.5 to 0.5.
-- "r", "rx", "ry", "w", "h" are relative (0 to 1 scale, where 1 = full particle size).
-- Each entity has a "shapes" array of drawing primitives layered bottom-to-top.
-- Pick the best movement type per entity to match the vibe.
-- IMPORTANT: Canvas Y-axis is inverted. Negative vy = UP, positive vy = DOWN. Auras should generally rise UPWARD, so vy should usually be negative (e.g. [-3, -0.5]). Only use positive vy for rain, bounce, or falling effects.
+Styles: "solid" (opaque, for characters/objects), "smoke" (wispy, for fire/fog/mist), "glow" (bright halo, for energy/magic/stars).
 
-Output JSON ONLY. No markdown. No backticks. No comments. CRITICAL: Ensure all array elements are separated by commas. Schema:
-{
-  "name": "string",
-  "description": "string (max 10 words)",
-  "glowColor": "#hex (primary theme color for avatar glow)",
-  "density": number (50-300 for discrete particles, 60-100 for fluid smoke — fewer particles since each puff is large and soft),
-  "background": "clear" | "dark-fade" | "black-fade",
-  "renderMode": "discrete" | "fluid" (CRITICAL: use "fluid" for smoke/fog/mist/clouds/exhaust/steam/gas - anything that should blend smoothly. Use "discrete" for solid objects, characters, sparks, crystals, leaves, etc.),
-  "entities": [
-    {
-      "weight": number (relative spawn probability, e.g. 1),
-      "size": [minSize, maxSize] (e.g. [12, 20] for discrete, [20, 50] for fluid smoke),
-      "speed": { "vx": [min, max], "vy": [min, max] },
-      "style": "solid" | "smoke" | "glow" (rendering style, see below),
-      "movement": STRING_PRESET | CUSTOM_OBJECT (see below),
-      "shapes": [
-        { "type": "circle", "cx": 0, "cy": 0, "r": 0.5, "fill": "#hex" },
-        { "type": "ellipse", "cx": 0, "cy": 0, "rx": 0.3, "ry": 0.2, "fill": "#hex" },
-        { "type": "rect", "x": -0.25, "y": -0.25, "w": 0.5, "h": 0.5, "fill": "#hex" },
-        { "type": "triangle", "points": [x1,y1, x2,y2, x3,y3], "fill": "#hex" },
-        { "type": "line", "x1": 0, "y1": 0, "x2": 0.5, "y2": 0.5, "stroke": "#hex", "width": 0.03 },
-        { "type": "arc", "cx": 0, "cy": 0, "r": 0.3, "startAngle": 0, "endAngle": 3.14, "fill": "#hex", "stroke": "#hex" },
-        { "type": "polygon", "points": [x1,y1, x2,y2, x3,y3, x4,y4, ...], "fill": "#hex" }
-      ]
-    }
-  ]
-}
+Movement presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"
+Movement custom object: {gravity:(-0.1 to 0.1), friction:(0.9-1.0), wave:{axis,amp,freq}, attract:(-0.005 to 0.005), spin:(-2 to 2), jitter:(0-0.3), bounce:{floor,elasticity}, scale:(0.97-1.03)}
 
-Arc angles are in radians (0 = right, Math.PI/2 = down, Math.PI = left, Math.PI*1.5 = up). Use arc for smiles, crescents, eyebrows, curved mouths. Use polygon for any n-sided shape (stars, pentagons, hexagons, crowns, etc).
+renderMode: "discrete" (solid objects/characters/sparks) or "fluid" (smoke/fog/mist — engine auto-expands particles as radial-gradient blobs).
+Fluid rules: style="smoke", density 60-80, size [20,35], vy [-1.8,-0.5], one circle shape per entity.
 
-RENDERING STYLES — each entity picks one:
-- "solid": Crisp, opaque shapes. ALWAYS use for characters/objects with faces and details. Default.
-- "smoke": Soft, wispy, semi-transparent with additive blending. Use for: fire, fog, mist, exhaust, clouds, steam, ghostly effects. MUST be paired with renderMode: "fluid" for realistic smoke.
-- "glow": Bright center with radiant halo edge. Use for: energy orbs, magic, lightning, stars, neon, plasma, holy light.
+Schema:
+{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","entities":[{"weight":number,"size":[min,max],"speed":{"vx":[min,max],"vy":[min,max]},"style":"solid"|"smoke"|"glow","movement":string_or_object,"shapes":[...]}]}
 
-You can MIX styles across entities in the same aura! Example for "super saiyan":
-- Flame wisps → "smoke" style + renderMode: "fluid" (soft rising flames that blend)
-- Energy orbs → "glow" style + renderMode: "discrete" (bright pulsing orbs)
-- Electric sparks → "solid" style + renderMode: "discrete" (crisp lightning bolts)
+=== EXAMPLES ===
 
-CRITICAL RULE FOR SMOKE/FOG/MIST:
-- ALWAYS set renderMode: "fluid" at the top level
-- Use "smoke" style for entities
-- Use larger particle sizes [25, 60]
-- Use lower density 150-200
-- Use slow upward movement with horizontal drift
+User: "fire"
+{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
-MOVEMENT — use a string preset OR a custom object:
+User: "super saiyan"
+{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
 
-String presets (simple, reliable):
-"float" | "zigzag" | "orbit" | "rise" | "wander" | "spiral" | "rain" | "explode" | "swarm" | "bounce" | "pulse" | "vortex"
+User: "mystic fog"
+{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
 
-Custom movement object (for unique patterns — combine any of these properties):
-{
-  "gravity": number (-0.1 to 0.1, negative=up, positive=down),
-  "friction": number (0.9 to 1.0, velocity damping per frame. 0.95=fast slowdown, 0.99=gentle),
-  "wave": { "axis": "x"|"y"|"both", "amp": number (0.1-4), "freq": number (0.1-4) },
-  "attract": number (-0.005 to 0.005, pull toward center. negative=repel),
-  "spin": number (-2 to 2, circular motion overlay speed),
-  "jitter": number (0-0.3, random noise),
-  "bounce": { "floor": number (0.5-0.9, screen position), "elasticity": number (0.1-0.9) },
-  "scale": number (0.97-1.03, size change per frame. <1=shrink, >1=grow)
-}
+User: "floating cat faces"
+{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
 
-Example custom: a flame that rises, wobbles, and shrinks:
-"movement": { "gravity": -0.03, "wave": { "axis": "x", "amp": 1.2, "freq": 1.5 }, "scale": 0.99 }
+User: "pokemon aura" (generic franchise — multiple different characters)
+{"name":"Pokemon Aura","descriptiimage.pngon":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}
 
-Example custom: an orb that swirls inward and slows:
-"movement": { "spin": 1.5, "attract": 0.003, "friction": 0.995 }
+=== TASK ===
 
-Use presets for simple cases. Use custom objects when the theme needs unique physics that no preset covers. You can combine any properties freely.
-Shapes also support optional "stroke" and "strokeWidth" on circle/ellipse/rect/triangle/arc/polygon.
+Based on the spec and examples above, generate a particle configuration for:
 
-EXAMPLE for "super saiyan" aura — golden flame wisp (smoke style):
-{"weight":2,"size":[15,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[
-{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},
-{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},
-{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFFF80"}
-]}
+"${promptInput}"
 
-EXAMPLE for "super saiyan" aura — energy orb (glow style):
-{"weight":1,"size":[6,12],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[
-{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},
-{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#FFFFCC"}
-]}
+How to interpret the request:
+- Power/energy/effect words ("super saiyan", "fire aura", "ice storm") → visual aura effect with themed particles. Use 2-3 entities with mixed styles. ALL entities must use colors that match the theme — e.g. fire = reds/oranges/yellows only, ice = blues/whites/cyans only. NEVER add white, gray, or off-theme colored smoke/glow/orbs to an effect aura.
+- Request describes a specific shape or character ( "Pikachu", "stars") → generate ONLY that shape/character. One entity. Nothing else.
+- Request names a group or franchise without one specific thing ("Paw Patrol", "pokemon aura", "floating animals") → generate 2-3 different characters from that group. Each entity is a different character. All style:"solid", size [24,34].
+- Ambiguous → default to effect aura.
 
-EXAMPLE for "super saiyan" aura — electric spark (solid style):
-{"weight":1,"size":[8,14],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[
-{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},
-{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFFF00","width":0.06},
-{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFFFAA","width":0.04}
-]}
+Critical rules:
+1. NEVER add generic glow orbs, smoke puffs, or abstract accent particles alongside character/shape particles. If the user asks for "bomb", every particle must be a bomb. If they ask for "creeper aura", every particle must be a creeper face. No filler entities.
+2. For effect auras: every entity must stay on-theme. No white smoke, no gray puffs, no colorless filler. If user says "fire", ALL entities must be warm-colored (red, orange, yellow, amber). If user says "ice", ALL entities must be cool-colored (blue, cyan, white). Every entity must visually reinforce the same theme.
 
-EXAMPLE for "smoke aura" or "fog" — FLUID MODE (realistic smoke that expands as it rises):
-{
-  "name": "Mystic Smoke",
-  "description": "Rising ethereal smoke wisps",
-  "glowColor": "#9ca3af",
-  "density": 70,
-  "background": "clear",
-  "renderMode": "fluid",
-  "entities": [
-    {
-      "weight": 1,
-      "size": [20, 35],
-      "speed": {"vx": [-0.15, 0.15], "vy": [-1.8, -0.6]},
-      "style": "smoke",
-      "movement": {"gravity": -0.01, "wave": {"axis": "x", "amp": 1, "freq": 0.5}, "friction": 0.99},
-      "shapes": [
-        {"type": "circle", "cx": 0, "cy": 0, "r": 0.5, "fill": "#6b7280"}
-      ]
-    }
-  ]
-}
-
-CRITICAL FOR FLUID SMOKE:
-- The engine draws each particle as a soft radial-gradient blob (dense core → transparent edge). The shape fill color is used as the smoke color. Only one circle shape is needed per entity.
-- The engine auto-expands particles as they rise. Do NOT set large initial sizes.
-- Keep density LOW (60-80). Each puff is big and soft already.
-- Use background: "clear" so the background stays transparent.
-- Keep vy slow: [-1.8, -0.5] for gentle rising.`;
+Constraints:
+- vy is usually negative (upward). Positive vy only for rain/bounce/falling.
+- density: 50-200 discrete, 60-80 fluid.
+- Use bold filled shapes. Avoid outline-only shapes.
+- Minimum entity size is [18,24]. Anything smaller is unreadable.
+- Every entity must have at least 3 shapes so it looks like something recognizable.
+- Valid JSON with commas between all array elements.
+- Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.`;
 
     try {
       const text = await callLLMText(systemPrompt);
@@ -650,6 +805,15 @@ CRITICAL FOR FLUID SMOKE:
     let count = 0;
     if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig) {
       count = customAuraConfig.density || 100;
+    } else {
+      switch (activeAura) {
+        case AURA_TYPES.FIRE: count = 200; break;
+        case AURA_TYPES.WIND: count = 150; break;
+        case AURA_TYPES.ELECTRIC: count = 12; break;
+        case AURA_TYPES.COSMIC: count = 100; break;
+        case AURA_TYPES.EXHAUST: count = 100; break;
+        default: count = 0;
+      }
     }
 
     for (let i = 0; i < count; i++) {
@@ -667,7 +831,6 @@ CRITICAL FOR FLUID SMOKE:
       const renderMode = customAuraConfig?.renderMode || 'discrete';
       
       if (renderMode === 'fluid') {
-        // Fluid mode: CLEAR every frame — the particles themselves handle all the softness
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       } else if (bg === 'dark-fade') {
         ctx.globalCompositeOperation = 'source-over';
@@ -679,6 +842,13 @@ CRITICAL FOR FLUID SMOKE:
       } else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
+    } else if ([AURA_TYPES.FIRE, AURA_TYPES.ELECTRIC].includes(activeAura)) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else if ([AURA_TYPES.COSMIC, AURA_TYPES.EXHAUST].includes(activeAura)) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -706,9 +876,10 @@ CRITICAL FOR FLUID SMOKE:
 
   const glowColor = activeAura === AURA_TYPES.CUSTOM ? (customAuraConfig?.glowColor || '#a855f7') : AURA_COLORS[activeAura];
   const hasAura = activeAura !== AURA_TYPES.NONE;
+  const PRESET_LABELS = { fire: 'Fire', wind: 'Wind', electric: 'Shock', cosmic: 'Cosmic', exhaust: 'Smoke' };
   const auraName = activeAura === AURA_TYPES.CUSTOM
     ? (customAuraConfig?.name || "Unknown Energy")
-    : (activeAura === AURA_TYPES.NONE ? null : activeAura);
+    : (activeAura === AURA_TYPES.NONE ? null : (PRESET_LABELS[activeAura] || activeAura));
 
   return (
     <div className="h-screen bg-black text-white font-sans overflow-hidden flex flex-col relative select-none">
@@ -813,6 +984,44 @@ CRITICAL FOR FLUID SMOKE:
               </button>
             </div>
           )}
+
+          {/* Preset aura buttons */}
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            {[
+              { type: AURA_TYPES.FIRE, icon: <Flame size={13} />, label: 'Fire', color: '#ff5500' },
+              { type: AURA_TYPES.WIND, icon: <Wind size={13} />, label: 'Wind', color: '#00ffcc' },
+              { type: AURA_TYPES.ELECTRIC, icon: <Zap size={13} />, label: 'Shock', color: '#aa00ff' },
+              { type: AURA_TYPES.COSMIC, icon: <Sparkles size={13} />, label: 'Cosmic', color: '#6366f1' },
+              { type: AURA_TYPES.EXHAUST, icon: <CloudFog size={13} />, label: 'Smoke', color: '#94a3b8' },
+            ].map(({ type, icon, label, color }) => (
+              <button
+                key={type}
+                onClick={() => {
+                  if (activeAura === type) {
+                    setActiveAura(AURA_TYPES.NONE);
+                  } else {
+                    setActiveAura(type);
+                    setCustomAuraConfig(null);
+                    setAiMessage("");
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
+                  activeAura === type
+                    ? 'scale-105'
+                    : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12] hover:bg-white/[0.04]'
+                }`}
+                style={activeAura === type ? {
+                  background: `${color}18`,
+                  color: color,
+                  borderColor: `${color}35`,
+                  boxShadow: `0 0 10px ${color}25`
+                } : {}}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
 
           {/* AI message */}
           {aiMessage && (

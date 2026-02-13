@@ -1,0 +1,42 @@
+{
+  "name": "Frozen Tempest",
+  "description": "Swirling ice shards and frost mist",
+  "glowColor": "#67e8f9",
+  "density": 180,
+  "background": "dark-fade",
+  "renderMode": "discrete",
+  "entities": [
+    {
+      "weight": 3,
+      "size": [10, 20],
+      "speed": { "vx": [-1.5, 1.5], "vy": [-2.5, -1] },
+      "style": "solid",
+      "movement": "zigzag",
+      "shapes": [
+        { "type": "polygon", "points": [0, -0.4, -0.15, 0, 0, 0.4, 0.15, 0], "fill": "#a5f3fc" },
+        { "type": "line", "x1": 0, "y1": -0.35, "x2": 0, "y2": 0.35, "stroke": "#e0f7ff", "width": 0.03 }
+      ]
+    },
+    {
+      "weight": 1,
+      "size": [6, 10],
+      "speed": { "vx": [-0.8, 0.8], "vy": [-1.5, -0.3] },
+      "style": "glow",
+      "movement": "float",
+      "shapes": [
+        { "type": "circle", "cx": 0, "cy": 0, "r": 0.4, "fill": "#22d3ee" },
+        { "type": "circle", "cx": 0, "cy": 0, "r": 0.15, "fill": "#ffffff" }
+      ]
+    },
+    {
+      "weight": 2,
+      "size": [15, 30],
+      "speed": { "vx": [-0.3, 0.3], "vy": [-1.2, -0.4] },
+      "style": "smoke",
+      "movement": { "gravity": -0.01, "wave": { "axis": "x", "amp": 1.5, "freq": 0.8 }, "friction": 0.995 },
+      "shapes": [
+        { "type": "circle", "cx": 0, "cy": 0, "r": 0.5, "fill": "#94a3b8" }
+      ]
+    }
+  ]
+}
