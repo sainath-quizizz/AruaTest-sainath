@@ -860,7 +860,7 @@ export default function AuraStudio() {
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-gray-500 hover:text-purple-400 hover:bg-white/[0.06] transition-all"
           >
             <RotateCcw size={11} />
-            Reset
+            Reset1
           </button>
         </div>
 
