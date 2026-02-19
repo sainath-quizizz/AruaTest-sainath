@@ -9,7 +9,7 @@ import {
   Flame,
   Wind,
   Zap,
-  CloudFog
+  Flower2
 } from 'lucide-react';
 
 const AURA_TYPES = {
@@ -18,7 +18,7 @@ const AURA_TYPES = {
   WIND: 'wind',
   ELECTRIC: 'electric',
   COSMIC: 'cosmic',
-  EXHAUST: 'exhaust',
+  SAKURA: 'sakura',
   CUSTOM: 'custom'
 };
 
@@ -28,11 +28,352 @@ const AURA_COLORS = {
   [AURA_TYPES.WIND]: '#00ffcc',
   [AURA_TYPES.ELECTRIC]: '#aa00ff',
   [AURA_TYPES.COSMIC]: '#6366f1',
-  [AURA_TYPES.EXHAUST]: '#94a3b8',
+  [AURA_TYPES.SAKURA]: '#ff9ec8',
   [AURA_TYPES.CUSTOM]: '#ffffff'
 };
 
 const random = (min, max) => Math.random() * (max - min) + min;
+
+const OUTER_SHAPE_PRESETS = {
+  [AURA_TYPES.FIRE]: {
+    shape: 'flame',
+    color: '#ff5500',
+    secondaryColor: '#ff8800',
+    intensity: 0.85,
+    speed: 1.3,
+    scale: 1.15,
+    pulseAmount: 0.06,
+    noiseAmount: 0.18,
+    hollowRatio: 0.55,
+    layers: 3,
+  },
+  [AURA_TYPES.WIND]: {
+    shape: 'vortex',
+    color: '#00ffcc',
+    secondaryColor: '#00ddaa',
+    intensity: 0.55,
+    speed: 0.9,
+    scale: 1.1,
+    pulseAmount: 0.04,
+    noiseAmount: 0.1,
+    hollowRatio: 0.6,
+    layers: 2,
+  },
+  [AURA_TYPES.ELECTRIC]: {
+    shape: 'spike',
+    color: '#aa00ff',
+    secondaryColor: '#dd44ff',
+    intensity: 0.9,
+    speed: 2.0,
+    scale: 1.1,
+    pulseAmount: 0.1,
+    noiseAmount: 0.25,
+    hollowRatio: 0.55,
+    layers: 3,
+  },
+  [AURA_TYPES.COSMIC]: {
+    shape: 'halo',
+    color: '#6366f1',
+    secondaryColor: '#818cf8',
+    intensity: 0.6,
+    speed: 0.5,
+    scale: 1.15,
+    pulseAmount: 0.03,
+    noiseAmount: 0.06,
+    hollowRatio: 0.65,
+    layers: 2,
+  },
+  [AURA_TYPES.SAKURA]: {
+    color: '#ff9ec8',
+    secondaryColor: '#ffcce0',
+    intensity: 0.45,
+    speed: 0.5,
+    scale: 1.0,
+    aspectRatio: 1.1,
+    pulseAmount: 0.02,
+    wobble: 0.03,
+    layers: 2,
+  },
+};
+
+class OuterShapeRenderer {
+  constructor(canvasWidth, canvasHeight) {
+    this.w = canvasWidth;
+    this.h = canvasHeight;
+    this.time = 0;
+    this.config = null;
+  }
+
+  setConfig(config) {
+    this.config = config;
+  }
+
+  update(dt) {
+    this.time += dt * (this.config?.speed || 1);
+  }
+
+  _hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16) || 0;
+    const g = parseInt(hex.slice(3, 5), 16) || 0;
+    const b = parseInt(hex.slice(5, 7), 16) || 0;
+    return { r, g, b };
+  }
+
+  _noiseAt(angle, time, freq, amp) {
+    return Math.sin(angle * freq + time) * amp
+         + Math.sin(angle * freq * 2.3 + time * 1.7) * amp * 0.5
+         + Math.sin(angle * freq * 0.7 + time * 0.6) * amp * 0.3;
+  }
+
+  draw(ctx) {
+    if (!this.config) return;
+
+    const cx = this.w / 2;
+    const cy = this.h * 0.47;
+    const baseRadius = Math.min(this.w, this.h) * 0.28 * (this.config.scale || 1.0);
+    const { color, secondaryColor, intensity, pulseAmount, noiseAmount, layers, shape } = this.config;
+    const t = this.time;
+
+    const rgb = this._hexToRgb(color);
+    const rgb2 = this._hexToRgb(secondaryColor || color);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let layer = layers; layer >= 1; layer--) {
+      const layerRatio = layer / layers;
+      const radius = baseRadius * (0.85 + layerRatio * 0.35);
+      const pulse = Math.sin(t * 2 + layer) * pulseAmount * radius;
+      const r = radius + pulse;
+      const alpha = intensity * (0.15 + (1 - layerRatio) * 0.15);
+
+      ctx.beginPath();
+
+      switch (shape) {
+        case 'flame':
+          this._drawFlame(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'spike':
+          this._drawSpike(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'halo':
+          this._drawHalo(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'vortex':
+          this._drawVortex(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'cloud':
+          this._drawCloud(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'shield':
+          this._drawShield(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'wings':
+          this._drawWings(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'diamond':
+          this._drawDiamond(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'crescent':
+          this._drawCrescent(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        case 'star':
+          this._drawStar(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+        default:
+          this._drawFlame(ctx, cx, cy, r, t, layer, noiseAmount);
+          break;
+      }
+
+      const grad = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.4);
+      const mixR = Math.round(rgb.r * layerRatio + rgb2.r * (1 - layerRatio));
+      const mixG = Math.round(rgb.g * layerRatio + rgb2.g * (1 - layerRatio));
+      const mixB = Math.round(rgb.b * layerRatio + rgb2.b * (1 - layerRatio));
+      grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},${alpha * 0.8})`);
+      grad.addColorStop(0.5, `rgba(${mixR},${mixG},${mixB},${alpha * 0.4})`);
+      grad.addColorStop(1, `rgba(${mixR},${mixG},${mixB},0)`);
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.6})`;
+      ctx.lineWidth = 2 - layerRatio;
+      ctx.shadowBlur = 15 * layerRatio;
+      ctx.shadowColor = `rgba(${mixR},${mixG},${mixB},${alpha})`;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
+  }
+
+  _drawFlame(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 1.5 + layer, 3, noise * r);
+      const topBias = Math.max(0, -Math.sin(angle)) * r * 0.35;
+      const flickerTop = Math.max(0, -Math.sin(angle)) * Math.sin(t * 3 + angle * 5) * r * 0.12;
+      const pr = r + n + topBias + flickerTop;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawSpike(ctx, cx, cy, r, t, layer, noise) {
+    const spikes = 12;
+    const segments = spikes * 2;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const isSpike = i % 2 === 0;
+      const spikeLen = isSpike ? r * (0.3 + Math.sin(t * 3 + i) * 0.15) : 0;
+      const n = this._noiseAt(angle, t * 2 + layer, 4, noise * r * 0.5);
+      const jitter = isSpike ? Math.sin(t * 5 + i * 2.7) * r * 0.08 : 0;
+      const pr = r + n + spikeLen + jitter;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawHalo(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 0.5 + layer, 2, noise * r * 0.5);
+      const breathe = Math.sin(t * 0.8 + layer * 0.5) * r * 0.03;
+      const pr = r + n + breathe;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawVortex(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    const spiralOffset = t * 0.8 + layer * 0.5;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t + layer, 3, noise * r);
+      const spiral = Math.sin(angle * 3 + spiralOffset) * r * 0.12;
+      const pr = r + n + spiral;
+      const x = cx + Math.cos(angle + spiralOffset * 0.1) * pr;
+      const y = cy + Math.sin(angle + spiralOffset * 0.1) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawCloud(ctx, cx, cy, r, t, layer, noise) {
+    const bumps = 8;
+    const segments = bumps * 10;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 0.7 + layer, 2, noise * r);
+      const bulge = Math.abs(Math.sin(angle * bumps * 0.5 + t * 0.5)) * r * 0.15;
+      const pr = r + n + bulge;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawShield(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 0.4 + layer, 1.5, noise * r * 0.3);
+      const pointy = Math.pow(Math.abs(Math.cos(angle)), 0.6) * r * 0.15;
+      const vertStretch = 1 + Math.abs(Math.sin(angle)) * 0.15;
+      const pr = (r + n + pointy) * vertStretch;
+      const x = cx + Math.cos(angle) * pr * 0.9;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawWings(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    const flapPhase = Math.sin(t * 1.5) * 0.15;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t + layer, 2, noise * r * 0.5);
+      const sideExtend = Math.pow(Math.abs(Math.cos(angle)), 1.5) * r * 0.5;
+      const flap = Math.abs(Math.cos(angle)) > 0.3
+        ? Math.cos(angle) > 0 ? flapPhase * r : -flapPhase * r
+        : 0;
+      const pr = r + n + sideExtend;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr + flap;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawDiamond(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 0.6 + layer, 2, noise * r * 0.3);
+      const diamond = (Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle))) * r * 0.2;
+      const pr = r * 0.85 + diamond + n;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawCrescent(ctx, cx, cy, r, t, layer, noise) {
+    const segments = 80;
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const n = this._noiseAt(angle, t * 0.5 + layer, 2, noise * r * 0.4);
+      const indent = Math.max(0, Math.cos(angle + 0.3)) * r * 0.25;
+      const pr = r + n - indent;
+      const x = cx + Math.cos(angle) * pr;
+      const y = cy + Math.sin(angle) * pr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  _drawStar(ctx, cx, cy, r, t, layer, noise) {
+    const points = 5;
+    const totalSegments = points * 2;
+    const stepSegments = 6;
+    const allPoints = [];
+    for (let i = 0; i < totalSegments; i++) {
+      const angle = (i / totalSegments) * Math.PI * 2 - Math.PI / 2;
+      const isOuter = i % 2 === 0;
+      const n = this._noiseAt(angle, t * 0.8 + layer, 2, noise * r * 0.3);
+      const pr = isOuter ? r * 1.15 + n : r * 0.65 + n * 0.5;
+      allPoints.push({
+        x: cx + Math.cos(angle) * pr,
+        y: cy + Math.sin(angle) * pr,
+      });
+    }
+    ctx.moveTo(allPoints[0].x, allPoints[0].y);
+    for (let i = 0; i < allPoints.length; i++) {
+      const next = allPoints[(i + 1) % allPoints.length];
+      const curr = allPoints[i];
+      for (let s = 1; s <= stepSegments; s++) {
+        const frac = s / stepSegments;
+        const x = curr.x + (next.x - curr.x) * frac;
+        const y = curr.y + (next.y - curr.y) * frac;
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+  }
+}
+
 const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
 const PORTKEY_URL = 'https://api.portkey.ai/v1/chat/completions';
 // for flash - use this model
@@ -208,17 +549,17 @@ class Particle {
         break;
       }
 
-      case AURA_TYPES.EXHAUST:
-        this.x = centerX + random(-80, 80);
-        this.y = feetY + 40;
-        this.vx = (this.x - centerX) * 0.05;
-        this.vy = random(-2, -0.5);
-        this.size = random(10, 30);
-        this.rotation = random(0, Math.PI * 2);
-        this.rotSpeed = random(-0.01, 0.01);
-        this.hue = 220;
+      case AURA_TYPES.SAKURA:
+        this.x = centerX + random(-100, 100);
+        this.y = feetY + 50;
+        this.vx = random(-1, 1);
+        this.vy = random(-3, -1);
+        this.size = random(4, 8);
+        this.rotation = random(0, 360);
+        this.rotSpeed = random(-5, 5);
         this.life = 1;
-        this.decay = random(0.005, 0.02);
+        this.decay = random(0.005, 0.015);
+        this.hue = random(330, 350);
         break;
 
       default:
@@ -414,12 +755,10 @@ class Particle {
         this.life -= this.decay;
         break;
 
-      case AURA_TYPES.EXHAUST:
-        this.x += this.vx;
+      case AURA_TYPES.SAKURA:
         this.y += this.vy;
-        if (this.rotSpeed) this.rotation += this.rotSpeed;
-        this.size *= 1.02;
-        this.vx *= 0.98;
+        this.x += Math.sin(this.y * 0.05) * 0.5;
+        this.rotation += this.rotSpeed;
         this.life -= this.decay;
         break;
     }
@@ -660,20 +999,16 @@ class Particle {
           }
           break;
 
-        case AURA_TYPES.EXHAUST: {
-          ctx.globalCompositeOperation = 'source-over';
+        case AURA_TYPES.SAKURA:
+          ctx.globalCompositeOperation = 'screen';
+          ctx.globalAlpha = this.life * 0.9;
+          ctx.fillStyle = `hsla(${this.hue}, 80%, 85%, 1)`;
           ctx.translate(this.x, this.y);
-          ctx.rotate(this.rotation || 0);
-          ctx.globalAlpha = this.life;
-          const smokeGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size);
-          smokeGrad.addColorStop(0, `hsla(${this.hue}, 10%, 80%, 0.8)`);
-          smokeGrad.addColorStop(1, `hsla(${this.hue}, 10%, 40%, 0)`);
-          ctx.fillStyle = smokeGrad;
+          ctx.rotate(this.rotation * Math.PI / 180);
           ctx.beginPath();
-          ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+          ctx.ellipse(0, 0, this.size, this.size / 2, 0, 0, Math.PI * 2);
           ctx.fill();
           break;
-        }
       }
     }
 
@@ -682,34 +1017,7 @@ class Particle {
 }
 
 
-export default function AuraStudio() {
-  const [activeAura, setActiveAura] = useState(AURA_TYPES.NONE);
-  const [avatar, setAvatar] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiMessage, setAiMessage] = useState("");
-  const [promptInput, setPromptInput] = useState("");
-  const [customAuraConfig, setCustomAuraConfig] = useState(null);
-
-  const canvasRef = useRef(null);
-  const animationRef = useRef(null);
-  const particlesRef = useRef([]);
-  const fileInputRef = useRef(null);
-
-  const handleImageUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => setAvatar(e.target.result);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const generateAura = async () => {
-    if (!promptInput.trim()) return;
-    setAiLoading(true);
-    setAiMessage("The Alchemist is designing particle physics...");
-
-    const systemPrompt = `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
+const DEFAULT_SYSTEM_PROMPT = `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
 
 === ENGINE SPEC ===
 
@@ -726,31 +1034,55 @@ Movement custom object: {gravity:(-0.1 to 0.1), friction:(0.9-1.0), wave:{axis,a
 renderMode: "discrete" (solid objects/characters/sparks) or "fluid" (smoke/fog/mist — engine auto-expands particles as radial-gradient blobs).
 Fluid rules: style="smoke", density 60-80, size [20,35], vy [-1.8,-0.5], one circle shape per entity.
 
+outerShape: An animated glowing HOLLOW ring/shell rendered ON TOP of particles, wrapping outside the avatar. Center is fully transparent — only the outer edge is visible as a radiating energy shape.
+outerShape.shape: "flame"|"spike"|"halo"|"vortex"|"cloud"|"shield"|"wings"|"diamond"|"crescent"|"star"
+outerShape.color: primary hex color (matches glowColor theme)
+outerShape.secondaryColor: secondary hex color for gradient layers
+outerShape.intensity: 0.3-1.0 (glow brightness)
+outerShape.speed: 0.3-3.0 (animation speed)
+outerShape.scale: 0.8-1.3 (size multiplier)
+outerShape.pulseAmount: 0.02-0.12 (breathing/pulse strength)
+outerShape.noiseAmount: 0.03-0.3 (edge distortion)
+outerShape.hollowRatio: 0.45-0.75 (how hollow the center is; 0.5 = thick ring, 0.7 = thin ring)
+outerShape.layers: 1-4 (number of concentric glow layers)
+
+Shape selection guide:
+- "flame" — fire, energy, rage, power-ups, super saiyan (sharp upward spikes)
+- "spike" — electric, lightning, aggressive, punk (radiating spikes all around)
+- "halo" — holy, calm, cosmic, zen, serene (smooth glowing ring)
+- "vortex" — wind, tornado, swirl, magic (spiraling edge)
+- "cloud" — smoke, fog, soft, dreamy (bumpy soft edge)
+- "shield" — defense, armor, protection, barrier (tall rounded shape)
+- "wings" — angel, bird, freedom, flight (extends sideways)
+- "diamond" — crystal, gem, luxury, ice (angular faceted edge)
+- "crescent" — moon, night, dark, mystic (indented on one side)
+- "star" — heroic, stellar, sparkle, fame (5-point star outline)
+
 Schema:
-{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","entities":[{"weight":number,"size":[min,max],"speed":{"vx":[min,max],"vy":[min,max]},"style":"solid"|"smoke"|"glow","movement":string_or_object,"shapes":[...]}]}
+{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","outerShape":{"shape":"string","color":"#hex","secondaryColor":"#hex","intensity":number,"speed":number,"scale":number,"pulseAmount":number,"noiseAmount":number,"hollowRatio":number,"layers":number},"entities":[{"weight":number,"size":[min,max],"speed":{"vx":[min,max],"vy":[min,max]},"style":"solid"|"smoke"|"glow","movement":string_or_object,"shapes":[...]}]}
 
 === EXAMPLES ===
 
 User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
+{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"flame","color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"noiseAmount":0.18,"hollowRatio":0.55,"layers":3},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
 User: "super saiyan"
-{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
+{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"flame","color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"noiseAmount":0.2,"hollowRatio":0.5,"layers":3},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
 
 User: "mystic fog"
-{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
+{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"shape":"cloud","color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"noiseAmount":0.12,"hollowRatio":0.6,"layers":2},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
 
 User: "floating cat faces"
-{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
+{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"shape":"halo","color":"#f9a8d4","secondaryColor":"#f472b6","intensity":0.45,"speed":0.6,"scale":1.1,"pulseAmount":0.03,"noiseAmount":0.06,"hollowRatio":0.65,"layers":2},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
 
 User: "pokemon aura" (generic franchise — multiple different characters)
-{"name":"Pokemon Aura","descriptiimage.pngon":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}
+{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"star","color":"#EF4444","secondaryColor":"#FBBF24","intensity":0.6,"speed":0.8,"scale":1.1,"pulseAmount":0.05,"noiseAmount":0.08,"hollowRatio":0.6,"layers":2},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}
 
 === TASK ===
 
 Based on the spec and examples above, generate a particle configuration for:
 
-"${promptInput}"
+"\${userPrompt}"
 
 How to interpret the request:
 - Power/energy/effect words ("super saiyan", "fire aura", "ice storm") → visual aura effect with themed particles. Use 2-3 entities with mixed styles. ALL entities must use colors that match the theme — e.g. fire = reds/oranges/yellows only, ice = blues/whites/cyans only. NEVER add white, gray, or off-theme colored smoke/glow/orbs to an effect aura.
@@ -769,10 +1101,45 @@ Constraints:
 - Minimum entity size is [18,24]. Anything smaller is unreadable.
 - Every entity must have at least 3 shapes so it looks like something recognizable.
 - Valid JSON with commas between all array elements.
-- Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.`;
+- Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.
+- ALWAYS include an "outerShape" object. Pick a shape that matches the theme (e.g. fire→"flame", electric→"spike", ice→"diamond", cosmic→"halo", wind→"vortex", holy→"wings", dark→"crescent", heroic→"star", defensive→"shield", soft→"cloud"). Colors must match glowColor theme. hollowRatio 0.5-0.55 for intense auras, 0.6-0.7 for subtle ones.`;
+
+export default function AuraStudio() {
+  const [activeAura, setActiveAura] = useState(AURA_TYPES.NONE);
+  const [avatar, setAvatar] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [promptInput, setPromptInput] = useState("");
+  const [customAuraConfig, setCustomAuraConfig] = useState(null);
+  const [showDevPanel, setShowDevPanel] = useState(true);
+  const [adminPrompt, setAdminPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+
+  const canvasRef = useRef(null);
+  const outerCanvasRef = useRef(null);
+  const animationRef = useRef(null);
+  const particlesRef = useRef([]);
+  const outerShapeRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const lastFrameTimeRef = useRef(performance.now());
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => setAvatar(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const generateAura = async () => {
+    if (!promptInput.trim()) return;
+    setAiLoading(true);
+    setAiMessage("The Alchemist is designing particle physics...");
+
+    const finalPrompt = adminPrompt.replace('${userPrompt}', promptInput);
 
     try {
-      const text = await callLLMText(systemPrompt);
+      const text = await callLLMText(finalPrompt);
       if (!text) throw new Error('No response');
       
       // Clean and fix common JSON issues
@@ -811,7 +1178,7 @@ Constraints:
         case AURA_TYPES.WIND: count = 150; break;
         case AURA_TYPES.ELECTRIC: count = 12; break;
         case AURA_TYPES.COSMIC: count = 100; break;
-        case AURA_TYPES.EXHAUST: count = 100; break;
+        case AURA_TYPES.SAKURA: count = 80; break;
         default: count = 0;
       }
     }
@@ -819,9 +1186,30 @@ Constraints:
     for (let i = 0; i < count; i++) {
       particlesRef.current.push(new Particle(activeAura, canvas.width, canvas.height, customAuraConfig));
     }
+
+    const outerCanvas = outerCanvasRef.current;
+    if (outerCanvas) {
+      if (!outerShapeRef.current) {
+        outerShapeRef.current = new OuterShapeRenderer(outerCanvas.width, outerCanvas.height);
+      }
+      outerShapeRef.current.w = outerCanvas.width;
+      outerShapeRef.current.h = outerCanvas.height;
+
+      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
+        outerShapeRef.current.setConfig(customAuraConfig.outerShape);
+      } else if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
+        outerShapeRef.current.setConfig(OUTER_SHAPE_PRESETS[activeAura]);
+      } else {
+        outerShapeRef.current.setConfig(null);
+      }
+    }
   }, [activeAura, customAuraConfig]);
 
   const animate = useCallback(() => {
+    const now = performance.now();
+    const dt = (now - lastFrameTimeRef.current) / 1000;
+    lastFrameTimeRef.current = now;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -846,7 +1234,7 @@ Constraints:
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if ([AURA_TYPES.COSMIC, AURA_TYPES.EXHAUST].includes(activeAura)) {
+    } else if ([AURA_TYPES.COSMIC, AURA_TYPES.SAKURA].includes(activeAura)) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     } else {
@@ -862,6 +1250,14 @@ Constraints:
       p.draw(ctx);
     });
 
+    const outerCanvas = outerCanvasRef.current;
+    if (outerCanvas && outerShapeRef.current) {
+      const outerCtx = outerCanvas.getContext('2d');
+      outerCtx.clearRect(0, 0, outerCanvas.width, outerCanvas.height);
+      outerShapeRef.current.update(dt);
+      outerShapeRef.current.draw(outerCtx);
+    }
+
     animationRef.current = requestAnimationFrame(animate);
   }, [activeAura, customAuraConfig]);
 
@@ -870,20 +1266,24 @@ Constraints:
       canvasRef.current.width = 600;
       canvasRef.current.height = 700;
     }
+    if (outerCanvasRef.current) {
+      outerCanvasRef.current.width = 600;
+      outerCanvasRef.current.height = 700;
+    }
+    lastFrameTimeRef.current = performance.now();
     animationRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationRef.current);
   }, [animate]);
 
   const glowColor = activeAura === AURA_TYPES.CUSTOM ? (customAuraConfig?.glowColor || '#a855f7') : AURA_COLORS[activeAura];
   const hasAura = activeAura !== AURA_TYPES.NONE;
-  const PRESET_LABELS = { fire: 'Fire', wind: 'Wind', electric: 'Shock', cosmic: 'Cosmic', exhaust: 'Smoke' };
+  const PRESET_LABELS = { fire: 'Fire', wind: 'Wind', electric: 'Shock', cosmic: 'Cosmic', sakura: 'Sakura' };
   const auraName = activeAura === AURA_TYPES.CUSTOM
     ? (customAuraConfig?.name || "Unknown Energy")
     : (activeAura === AURA_TYPES.NONE ? null : (PRESET_LABELS[activeAura] || activeAura));
 
   return (
     <div className="h-screen bg-black text-white font-sans overflow-hidden flex flex-col relative select-none">
-
       {/* Ambient background glow that follows the aura color */}
       <div
         className="absolute inset-0 transition-all duration-1000 pointer-events-none"
@@ -905,165 +1305,223 @@ Constraints:
           </span>
         </div>
 
-        {/* Upload avatar button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-all"
-        >
-          <ImagePlus size={14} />
-          {avatar ? 'Change' : 'Upload'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Dev prompt editor toggle */}
+          <button
+            onClick={() => setShowDevPanel(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              showDevPanel
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.06]'
+            }`}
+          >
+            <span className="font-mono text-[10px]">{'{}'}</span>
+            Dev
+          </button>
+
+          {/* Upload avatar button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <ImagePlus size={14} />
+            {avatar ? 'Change' : 'Upload'}
+          </button>
+        </div>
       </header>
 
-      {/* Main stage — takes remaining space */}
-      <main className="flex-1 flex flex-col items-center justify-center relative z-10 px-4 pb-4 min-h-0">
+      {/* Body: main stage + right dev panel */}
+      <main className="flex-1 flex relative z-10 min-h-0 overflow-hidden">
 
-        {/* Canvas + Avatar container */}
-        <div className="relative w-full max-w-lg flex-1 flex items-center justify-center min-h-0">
+        {/* Left: canvas + controls */}
+        <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4 min-h-0 min-w-0">
 
-          {/* Particle canvas */}
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full z-10 pointer-events-none"
-          />
+          {/* Canvas + Avatar container */}
+          <div className="relative w-full max-w-lg flex-1 flex items-center justify-center min-h-0">
 
-          {/* Avatar */}
-          <div className="relative z-20 w-72 h-72 md:w-96 md:h-96 transition-all duration-700 ease-out">
-            {avatar ? (
-              <img
-                src={avatar}
-                alt="Avatar"
-                className="w-full h-full object-contain transition-all duration-700"
-                style={{
-                  filter: hasAura
-                    ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))`
-                    : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
-                }}
-              />
-            ) : (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] flex flex-col items-center justify-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/[0.03] transition-all duration-300 group"
-              >
-                <div className="w-20 h-20 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4 group-hover:bg-purple-500/10 transition-colors">
-                  <Camera size={32} className="text-gray-600 group-hover:text-purple-400 transition-colors" />
-                </div>
-                <p className="text-sm font-medium text-gray-600 group-hover:text-gray-400 transition-colors">Drop your character here</p>
-                <p className="text-xs text-gray-700 mt-1">PNG, JPG, or WebP</p>
-              </div>
-            )}
-          </div>
-
-          {/* Soft vignette */}
-          <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{background: 'radial-gradient(circle, transparent 35%, rgba(0,0,0,0.6) 100%)'}} />
-        </div>
-
-        {/* Bottom controls overlay */}
-        <div className="relative z-40 w-full max-w-lg mt-2 space-y-3">
-
-          {/* Aura name badge */}
-          {auraName && (
-            <div className="flex items-center justify-center gap-3">
-              <div
-                className="px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.2em] uppercase transition-all duration-500 flex items-center gap-2"
-                style={{
-                  color: glowColor,
-                  background: `${glowColor}12`,
-                  border: `1px solid ${glowColor}25`,
-                  textShadow: `0 0 20px ${glowColor}60`
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: glowColor }} />
-                {auraName}
-              </div>
-              <button
-                onClick={() => { setActiveAura(AURA_TYPES.NONE); setCustomAuraConfig(null); setAiMessage(""); }}
-                className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-
-          {/* Preset aura buttons */}
-          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            {[
-              { type: AURA_TYPES.FIRE, icon: <Flame size={13} />, label: 'Fire', color: '#ff5500' },
-              { type: AURA_TYPES.WIND, icon: <Wind size={13} />, label: 'Wind', color: '#00ffcc' },
-              { type: AURA_TYPES.ELECTRIC, icon: <Zap size={13} />, label: 'Shock', color: '#aa00ff' },
-              { type: AURA_TYPES.COSMIC, icon: <Sparkles size={13} />, label: 'Cosmic', color: '#6366f1' },
-              { type: AURA_TYPES.EXHAUST, icon: <CloudFog size={13} />, label: 'Smoke', color: '#94a3b8' },
-            ].map(({ type, icon, label, color }) => (
-              <button
-                key={type}
-                onClick={() => {
-                  if (activeAura === type) {
-                    setActiveAura(AURA_TYPES.NONE);
-                  } else {
-                    setActiveAura(type);
-                    setCustomAuraConfig(null);
-                    setAiMessage("");
-                  }
-                }}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
-                  activeAura === type
-                    ? 'scale-105'
-                    : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12] hover:bg-white/[0.04]'
-                }`}
-                style={activeAura === type ? {
-                  background: `${color}18`,
-                  color: color,
-                  borderColor: `${color}35`,
-                  boxShadow: `0 0 10px ${color}25`
-                } : {}}
-              >
-                {icon}
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* AI message */}
-          {aiMessage && (
-            <p className="text-center text-xs text-gray-500 italic truncate px-4">
-              {aiMessage}
-            </p>
-          )}
-
-          {/* Generator input */}
-          <div className="relative group">
-            <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm"
-              style={{ background: `linear-gradient(135deg, ${hasAura ? glowColor : '#a855f7'}40, transparent)` }}
+            {/* Particle canvas */}
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full z-10 pointer-events-none"
             />
-            <div className="relative flex items-center bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden backdrop-blur-sm group-focus-within:border-white/[0.15] transition-all">
-              <div className="pl-4 pr-2 text-gray-600">
-                <Wand2 size={16} />
-              </div>
-              <input
-                type="text"
-                value={promptInput}
-                onChange={(e) => setPromptInput(e.target.value)}
-                placeholder={aiLoading ? "Generating..." : "Describe an aura... e.g. 'super saiyan energy'"}
-                disabled={aiLoading}
-                className="flex-1 bg-transparent py-3.5 pr-4 text-sm text-white focus:outline-none placeholder:text-gray-600 disabled:opacity-40"
-                onKeyDown={(e) => e.key === 'Enter' && generateAura()}
-              />
-              {aiLoading ? (
-                <div className="pr-4">
-                  <Loader2 size={16} className="animate-spin text-purple-400" />
-                </div>
-              ) : promptInput.trim() && (
-                <button
-                  onClick={generateAura}
-                  className="mr-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.08] text-gray-300 hover:bg-white/[0.15] hover:text-white transition-all"
+
+            {/* Outer shape canvas — outermost animated container wrapping glow + particles */}
+            <canvas
+              ref={outerCanvasRef}
+              className="absolute inset-0 w-full h-full z-[25] pointer-events-none"
+            />
+
+            {/* Avatar */}
+            <div className="relative z-20 w-72 h-72 md:w-96 md:h-96 transition-all duration-700 ease-out">
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt="Avatar"
+                  className="w-full h-full object-contain transition-all duration-700"
+                  style={{
+                    filter: hasAura
+                      ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))`
+                      : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
+                  }}
+                />
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] flex flex-col items-center justify-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/[0.03] transition-all duration-300 group"
                 >
-                  Enter
-                </button>
+                  <div className="w-20 h-20 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4 group-hover:bg-purple-500/10 transition-colors">
+                    <Camera size={32} className="text-gray-600 group-hover:text-purple-400 transition-colors" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 group-hover:text-gray-400 transition-colors">Drop your character here</p>
+                  <p className="text-xs text-gray-700 mt-1">PNG, JPG, or WebP</p>
+                </div>
               )}
             </div>
+
+            {/* Soft vignette */}
+            <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{background: 'radial-gradient(circle, transparent 35%, rgba(0,0,0,0.6) 100%)'}} />
           </div>
 
+          {/* Bottom controls */}
+          <div className="relative z-40 w-full max-w-lg mt-2 space-y-3">
+
+            {/* Aura name badge */}
+            {auraName && (
+              <div className="flex items-center justify-center gap-3">
+                <div
+                  className="px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.2em] uppercase transition-all duration-500 flex items-center gap-2"
+                  style={{
+                    color: glowColor,
+                    background: `${glowColor}12`,
+                    border: `1px solid ${glowColor}25`,
+                    textShadow: `0 0 20px ${glowColor}60`
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: glowColor }} />
+                  {auraName}
+                </div>
+                <button
+                  onClick={() => { setActiveAura(AURA_TYPES.NONE); setCustomAuraConfig(null); setAiMessage(""); }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            {/* Preset aura buttons */}
+            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+              {[
+                { type: AURA_TYPES.FIRE, icon: <Flame size={13} />, label: 'Fire', color: '#ff5500' },
+                { type: AURA_TYPES.WIND, icon: <Wind size={13} />, label: 'Wind', color: '#00ffcc' },
+                { type: AURA_TYPES.ELECTRIC, icon: <Zap size={13} />, label: 'Shock', color: '#aa00ff' },
+                { type: AURA_TYPES.COSMIC, icon: <Sparkles size={13} />, label: 'Cosmic', color: '#6366f1' },
+                { type: AURA_TYPES.SAKURA, icon: <Flower2 size={13} />, label: 'Sakura', color: '#ff9ec8' },
+              ].map(({ type, icon, label, color }) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    if (activeAura === type) {
+                      setActiveAura(AURA_TYPES.NONE);
+                    } else {
+                      setActiveAura(type);
+                      setCustomAuraConfig(null);
+                      setAiMessage("");
+                    }
+                  }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
+                    activeAura === type
+                      ? 'scale-105'
+                      : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12] hover:bg-white/[0.04]'
+                  }`}
+                  style={activeAura === type ? {
+                    background: `${color}18`,
+                    color: color,
+                    borderColor: `${color}35`,
+                    boxShadow: `0 0 10px ${color}25`
+                  } : {}}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* AI message */}
+            {aiMessage && (
+              <p className="text-center text-xs text-gray-500 italic truncate px-4">
+                {aiMessage}
+              </p>
+            )}
+
+            {/* Generator input */}
+            <div className="relative group">
+              <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm"
+                style={{ background: `linear-gradient(135deg, ${hasAura ? glowColor : '#a855f7'}40, transparent)` }}
+              />
+              <div className="relative flex items-center bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden backdrop-blur-sm group-focus-within:border-white/[0.15] transition-all">
+                <div className="pl-4 pr-2 text-gray-600">
+                  <Wand2 size={16} />
+                </div>
+                <input
+                  type="text"
+                  value={promptInput}
+                  onChange={(e) => setPromptInput(e.target.value)}
+                  placeholder={aiLoading ? "Generating..." : "Describe an aura... e.g. 'super saiyan energy'"}
+                  disabled={aiLoading}
+                  className="flex-1 bg-transparent py-3.5 pr-4 text-sm text-white focus:outline-none placeholder:text-gray-600 disabled:opacity-40"
+                  onKeyDown={(e) => e.key === 'Enter' && generateAura()}
+                />
+                {aiLoading ? (
+                  <div className="pr-4">
+                    <Loader2 size={16} className="animate-spin text-purple-400" />
+                  </div>
+                ) : promptInput.trim() && (
+                  <button
+                    onClick={generateAura}
+                    className="mr-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.08] text-gray-300 hover:bg-white/[0.15] hover:text-white transition-all"
+                  >
+                    Enter
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
         </div>
+
+        {/* Right: Dev panel */}
+        <div
+          className={`flex-shrink-0 border-l border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${
+            showDevPanel ? 'w-80' : 'w-0 overflow-hidden border-l-0'
+          }`}
+        >
+          {showDevPanel && (
+            <>
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-amber-500/10 bg-amber-500/[0.03] flex-shrink-0">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-mono text-amber-400/80 tracking-widest uppercase">System Prompt</span>
+                  <span className="text-[9px] text-gray-600">
+                    Use <code className="text-amber-500/60">{'${userPrompt}'}</code> as placeholder
+                  </span>
+                </div>
+                <button
+                  onClick={() => setAdminPrompt(DEFAULT_SYSTEM_PROMPT)}
+                  className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-amber-500/10"
+                >
+                  Reset
+                </button>
+              </div>
+              <textarea
+                value={adminPrompt}
+                onChange={(e) => setAdminPrompt(e.target.value)}
+                className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed"
+                spellCheck={false}
+              />
+            </>
+          )}
+        </div>
+
       </main>
 
       <input
