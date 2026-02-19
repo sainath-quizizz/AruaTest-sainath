@@ -19,10 +19,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-const PORTKEY_API_KEY = '7uuFM238TMkz2A0I+VvMfoZVm9l+';
-const PORTKEY_BASE = 'https://api.portkey.ai/v1';
-const VIDEO_VIRTUAL_KEY = 'open-ai-service-60e884';
-const VIDEO_MODEL = 'sora-2';
+const VIDEO_SERVER_BASE = 'http://10.192.20.140:3000';
 
 const PRESETS = {
   fire: {
@@ -88,7 +85,11 @@ Do not include any characters, people, or figures in the frame. Only the VFX aur
 
 The aura should have clearly defined, dynamic movement that suits the specific shape and style requested. Pay special attention to how the aura moves—whether it swirls, flows upward, pulses, or changes direction. The aura must maintain a sense of motion while adhering to the desired structure, whether it's a static burst or an evolving, swirling pattern. The key focus is on the consistency of the shape and motion, rather than visual clarity.
 
+
+REMEMBER we only and only want to generate the aura effect, not the background or the character.
+
 Ensure that all shapes, motions, and effects follow a consistent, repeatable pattern that can be adapted to different prompts. Focus on creating effects that are flexible for integration into various scenes while maintaining the desired aura form.`.trim();
+
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -230,66 +231,76 @@ async function deleteVideoFromDB(id) {
   }
 }
 
-function authHeaders() {
-  return {
-    'x-portkey-api-key': PORTKEY_API_KEY,
-    'x-portkey-virtual-key': VIDEO_VIRTUAL_KEY
-  };
-}
-
-async function apiCreateVideo(prompt) {
+async function apiStartGeneration(prompt) {
   console.log('Generated prompt:', prompt);
 
-  const res = await fetch(`${PORTKEY_BASE}/videos`, {
+  const res = await fetch(`${VIDEO_SERVER_BASE}/generate`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: VIDEO_MODEL,
-      prompt,
-      size: '1280x720',
-      seconds: '4'
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
   });
 
   if (!res.ok) {
     const bodyText = await res.text();
-    console.error('Create video error:', res.status, bodyText);
-    throw new Error(`Create failed (${res.status}): ${bodyText}`);
+    console.error('Start generation error:', res.status, bodyText);
+    throw new Error(`Generation start failed (${res.status}): ${bodyText}`);
   }
   return res.json();
 }
 
-async function apiPollVideo(videoId) {
-  const res = await fetch(`${PORTKEY_BASE}/videos/${videoId}`, {
-    headers: authHeaders()
-  });
+async function apiStreamProgress(jobId, { onProgress, onDone, signal }) {
+  const res = await fetch(`${VIDEO_SERVER_BASE}/stream/${jobId}`, { signal });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error('Poll video error:', res.status, body);
-    throw new Error(`Poll failed (${res.status}): ${body}`);
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const cleaned = line.replace(/^data:\s*/, '').trim();
+      if (!cleaned) continue;
+      try {
+        const data = JSON.parse(cleaned);
+        if (data.status === 'done') {
+          onDone(data);
+          return;
+        }
+        onProgress(data);
+      } catch {
+        // partial or non-JSON chunk, skip
+      }
+    }
   }
-  return res.json();
+
+  if (buffer.trim()) {
+    const cleaned = buffer.replace(/^data:\s*/, '').trim();
+    try {
+      const data = JSON.parse(cleaned);
+      if (data.status === 'done') {
+        onDone(data);
+        return;
+      }
+      onProgress(data);
+    } catch {
+      // ignore
+    }
+  }
 }
 
-async function apiDownloadVideo(videoId) {
-  const res = await fetch(`${PORTKEY_BASE}/videos/${videoId}/content?variant=video`, {
-    headers: authHeaders()
-  });
-
+async function apiDownloadVideo(jobId, downloadUrl) {
+  const url = downloadUrl
+    ? `${VIDEO_SERVER_BASE}${downloadUrl}`
+    : `${VIDEO_SERVER_BASE}/download/${jobId}`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const blob = await res.blob();
   return URL.createObjectURL(blob);
-}
-
-function extractVideoUrl(video) {
-  if (video.url) return video.url;
-  if (video.output?.url) return video.output.url;
-  if (Array.isArray(video.output) && video.output[0]?.url) return video.output[0].url;
-  if (video.data?.url) return video.data.url;
-  if (Array.isArray(video.data) && video.data[0]?.url) return video.data[0].url;
-  if (video.result?.url) return video.result.url;
-  return null;
 }
 
 function AuraThumbnail({ aura, onLoad, onDelete }) {
@@ -446,48 +457,49 @@ export default function AuraStudio() {
 
     try {
       const finalPrompt = adminPrompt.replace(/\{user_prompt\}/g, prompt);
-      const job = await apiCreateVideo(finalPrompt);
-      const videoId = job.id;
-      console.log('Video job created:', videoId, job.status);
-      setStatusMsg(`Queued (${videoId})`);
+      const job = await apiStartGeneration(finalPrompt);
+      const jobId = job.job_id;
+      console.log('Video job created:', jobId);
+      setStatusMsg(`Queued (${jobId})`);
 
-      let video = job;
-      while (
-        (video.status === 'queued' || video.status === 'in_progress') &&
-        !abortRef.current
-      ) {
-        await sleep(5000);
-        video = await apiPollVideo(videoId);
-        const p = video.progress ?? 0;
-        setProgress(p);
-        setStatusMsg(
-          video.status === 'queued'
-            ? `Queued... ${p.toFixed(0)}%`
-            : `Generating... ${p.toFixed(0)}%`
-        );
-      }
+      const streamResult = await new Promise((resolve, reject) => {
+        const controller = new AbortController();
+
+        const checkAbort = setInterval(() => {
+          if (abortRef.current) {
+            controller.abort();
+            clearInterval(checkAbort);
+            reject(new Error('Cancelled'));
+          }
+        }, 500);
+
+        apiStreamProgress(jobId, {
+          signal: controller.signal,
+          onProgress: (data) => {
+            const p = data.progress || 0;
+            setProgress(p);
+            setStatusMsg(`Generating... ${p.toFixed(0)}%`);
+          },
+          onDone: (data) => {
+            clearInterval(checkAbort);
+            resolve(data);
+          }
+        }).catch((err) => {
+          clearInterval(checkAbort);
+          reject(err);
+        });
+      });
 
       if (abortRef.current) {
         setStatusMsg('Cancelled');
         return;
       }
 
-      if (video.status === 'failed') {
-        throw new Error(video.error?.message || 'Video generation failed');
-      }
-      if (video.status !== 'completed') {
-        throw new Error(`Unexpected status: ${video.status}`);
-      }
+      console.log('Video completed:', JSON.stringify(streamResult, null, 2));
+      setStatusMsg('Downloading video...');
 
-      console.log('Video completed:', JSON.stringify(video, null, 2));
-      setStatusMsg('Loading video...');
-
-      let url = extractVideoUrl(video);
-      if (!url) {
-        console.log('No URL in response, attempting direct download...');
-        url = await apiDownloadVideo(videoId);
-        blobUrlRef.current = url;
-      }
+      const url = await apiDownloadVideo(jobId, streamResult.download_url);
+      blobUrlRef.current = url;
 
       setProgress(100);
 
