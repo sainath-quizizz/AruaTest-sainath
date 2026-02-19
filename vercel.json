@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd aura-studio && npm install && npm run build",
+  "outputDirectory": "aura-studio/dist",
+  "installCommand": "echo 'skip'"
+}
