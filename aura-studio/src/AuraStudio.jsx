@@ -1669,7 +1669,7 @@ export default function AuraStudio() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-purple-300 flex items-center gap-2">
                     <span className="text-sm">⚡</span>
-                    Physics Testing
+                    Physics Controls
                   </span>
                   {selectedPhysics.length > 0 && (
                     <button
@@ -1809,7 +1809,7 @@ export default function AuraStudio() {
                   </div>
 
                   {/* Speed Slider */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 mb-4">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-medium text-gray-400">Speed</label>
                       <span className="text-[10px] text-gray-500 font-mono">
@@ -1830,11 +1830,34 @@ export default function AuraStudio() {
                     />
                   </div>
 
+                  {/* Size Slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-medium text-gray-400">Size</label>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {(sizeMultiplier * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="3"
+                      step="0.1"
+                      value={sizeMultiplier}
+                      onChange={(e) => setSizeMultiplier(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((sizeMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((sizeMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
+                      }}
+                    />
+                  </div>
+
                   {/* Reset Button */}
                   <button
                     onClick={() => {
                       setDensityMultiplier(1.0);
                       setSpeedMultiplier(1.0);
+                      setSizeMultiplier(1.0);
                     }}
                     className="w-full mt-3 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-cyan-500/10 transition-all"
                   >
