@@ -1222,6 +1222,8 @@ export default function AuraStudio() {
   const [activePromptTab, setActivePromptTab] = useState('glow');
   const [selectedPhysics, setSelectedPhysics] = useState([]);
   const [showPhysicsPanel, setShowPhysicsPanel] = useState(true);
+  const [originalAuraConfig, setOriginalAuraConfig] = useState(null);
+  const [originalAuraType, setOriginalAuraType] = useState(null);
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
@@ -1268,6 +1270,10 @@ export default function AuraStudio() {
       setActiveAura(AURA_TYPES.CUSTOM);
       setAiMessage(`Forged: ${config.name} - ${config.description}`);
       setPromptInput("");
+      // Clear physics testing state for new aura
+      setSelectedPhysics([]);
+      setOriginalAuraConfig(null);
+      setOriginalAuraType(null);
     } catch (e) {
       console.error("Aura generation error:", e);
       setAiMessage(`Failed: ${e.message}`);
@@ -1283,11 +1289,10 @@ export default function AuraStudio() {
         : [...prev, physics];
 
       // Apply physics automatically after updating selection
-      setTimeout(() => {
-        if (newSelection.length > 0) {
-          applyPhysicsWithSelection(newSelection);
-        }
-      }, 0);
+      if (newSelection.length > 0) {
+        setTimeout(() => applyPhysicsWithSelection(newSelection), 0);
+      }
+      // Restoration is handled by useEffect when newSelection.length === 0
 
       return newSelection;
     });
@@ -1298,6 +1303,11 @@ export default function AuraStudio() {
 
     // If there's already a custom aura, modify it
     if (customAuraConfig && activeAura === AURA_TYPES.CUSTOM) {
+      // Save original config only on first physics application
+      if (!originalAuraConfig) {
+        setOriginalAuraConfig(JSON.parse(JSON.stringify(customAuraConfig)));
+      }
+
       const updatedConfig = {
         ...customAuraConfig,
         entities: customAuraConfig.entities.map((entity, idx) => ({
@@ -1308,6 +1318,11 @@ export default function AuraStudio() {
       setCustomAuraConfig(updatedConfig);
       setAiMessage(`Applied physics: ${physicsSelection.join(', ')}`);
     } else if (activeAura !== AURA_TYPES.NONE && activeAura !== AURA_TYPES.CUSTOM) {
+      // Save the original preset type before converting
+      if (!originalAuraType) {
+        setOriginalAuraType(activeAura);
+      }
+
       // Convert preset aura to custom with selected physics
       const presetColors = {
         [AURA_TYPES.FIRE]: '#ff5500',
@@ -1350,6 +1365,25 @@ export default function AuraStudio() {
       setAiMessage(`Applied ${physicsSelection.join(', ')} to ${presetNames[activeAura]}`);
     }
   };
+
+  // Auto-restore original aura when all physics are deselected
+  useEffect(() => {
+    if (selectedPhysics.length === 0 && (originalAuraType || originalAuraConfig)) {
+      if (originalAuraType) {
+        // Restore preset aura
+        setActiveAura(originalAuraType);
+        setCustomAuraConfig(null);
+        setAiMessage("Restored original preset aura");
+        setOriginalAuraType(null);
+      } else if (originalAuraConfig) {
+        // Restore custom aura
+        setCustomAuraConfig(originalAuraConfig);
+        setActiveAura(AURA_TYPES.CUSTOM);
+        setAiMessage("Restored original aura");
+        setOriginalAuraConfig(null);
+      }
+    }
+  }, [selectedPhysics, originalAuraType, originalAuraConfig]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1818,7 +1852,14 @@ export default function AuraStudio() {
                   {auraName}
                 </div>
                 <button
-                  onClick={() => { setActiveAura(AURA_TYPES.NONE); setCustomAuraConfig(null); setAiMessage(""); }}
+                  onClick={() => {
+                    setActiveAura(AURA_TYPES.NONE);
+                    setCustomAuraConfig(null);
+                    setAiMessage("");
+                    setSelectedPhysics([]);
+                    setOriginalAuraConfig(null);
+                    setOriginalAuraType(null);
+                  }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"
                 >
                   <X size={12} />
@@ -1844,6 +1885,9 @@ export default function AuraStudio() {
                       setActiveAura(type);
                       setCustomAuraConfig(null);
                       setAiMessage("");
+                      setSelectedPhysics([]);
+                      setOriginalAuraConfig(null);
+                      setOriginalAuraType(null);
                     }
                   }}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
