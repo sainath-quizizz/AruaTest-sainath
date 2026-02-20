@@ -9,7 +9,8 @@ import {
   Flame,
   Wind,
   Zap,
-  Flower2
+  Flower2,
+  Sliders
 } from 'lucide-react';
 
 const AURA_TYPES = {
@@ -429,9 +430,10 @@ class Particle {
   update() {
     if (this.type === AURA_TYPES.CUSTOM && this.customConfig) {
       const isFluidMode = this.customConfig.renderMode === 'fluid';
-      
-      this.x += this.vx;
-      this.y += this.vy;
+
+      const speedMult = this.speedMultiplier || 1.0;
+      this.x += this.vx * speedMult;
+      this.y += this.vy * speedMult;
       if (this.rotSpeed) this.rotation += this.rotSpeed;
       this.movementPhase = (this.movementPhase || 0) + 0.08;
 
@@ -678,17 +680,18 @@ class Particle {
     }
 
     // --- PRESET AURA TYPES ---
+    const speedMult = this.speedMultiplier || 1.0;
     switch (this.type) {
       case AURA_TYPES.FIRE:
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx * speedMult;
+        this.y += this.vy * speedMult;
         this.vx *= 0.99;
         this.size *= 0.96;
         this.life -= this.decay;
         break;
 
       case AURA_TYPES.WIND:
-        this.y += this.vy;
+        this.y += this.vy * speedMult;
         this.x = this.initialX + Math.sin(this.y * this.frequency + this.phase) * this.amplitude;
         this.life -= this.decay;
         break;
@@ -699,13 +702,13 @@ class Particle {
         break;
 
       case AURA_TYPES.COSMIC:
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx * speedMult;
+        this.y += this.vy * speedMult;
         this.life -= this.decay;
         break;
 
       case AURA_TYPES.SAKURA:
-        this.y += this.vy;
+        this.y += this.vy * speedMult;
         this.x += Math.sin(this.y * 0.05) * 0.5;
         this.rotation += this.rotSpeed;
         this.life -= this.decay;
@@ -804,7 +807,8 @@ class Particle {
 
     if (this.type === AURA_TYPES.CUSTOM && this.customConfig && this.entity?.shapes) {
       const style = this.entity.style || 'solid';
-      const s = this.size;
+      const sizeMult = this.sizeMultiplier || 1.0;
+      const s = this.size * sizeMult;
 
       ctx.translate(this.x, this.y);
       ctx.rotate(this.rotation || 0);
@@ -876,17 +880,19 @@ class Particle {
       }
     } else {
       // --- PRESET AURA TYPES ---
+      const sizeMult = this.sizeMultiplier || 1.0;
       switch (this.type) {
         case AURA_TYPES.FIRE: {
           ctx.globalCompositeOperation = 'screen';
           ctx.globalAlpha = this.life * 0.8;
-          const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+          const fireSize = this.size * sizeMult;
+          const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, fireSize);
           gradient.addColorStop(0, 'hsla(40, 100%, 60%, 1)');
           gradient.addColorStop(0.5, `hsla(${this.hue}, 100%, 50%, 0.6)`);
           gradient.addColorStop(1, 'hsla(0, 100%, 20%, 0)');
           ctx.fillStyle = gradient;
           ctx.beginPath();
-          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.arc(this.x, this.y, fireSize, 0, Math.PI * 2);
           ctx.fill();
           break;
         }
@@ -910,7 +916,7 @@ class Particle {
           ctx.globalCompositeOperation = 'lighter';
           ctx.globalAlpha = this.life;
           ctx.strokeStyle = `hsla(${this.hue}, 80%, 70%, 1)`;
-          ctx.lineWidth = this.size;
+          ctx.lineWidth = this.size * sizeMult;
           ctx.shadowBlur = 10;
           ctx.shadowColor = `hsla(${this.hue}, 90%, 50%, 0.8)`;
           ctx.lineJoin = 'round';
@@ -1224,6 +1230,9 @@ export default function AuraStudio() {
   const [showPhysicsPanel, setShowPhysicsPanel] = useState(true);
   const [originalAuraConfig, setOriginalAuraConfig] = useState(null);
   const [originalAuraType, setOriginalAuraType] = useState(null);
+  const [densityMultiplier, setDensityMultiplier] = useState(1.0);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1.0);
+  const [sizeMultiplier, setSizeMultiplier] = useState(1.0);
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
@@ -1404,8 +1413,14 @@ export default function AuraStudio() {
       }
     }
 
+    // Apply density multiplier
+    count = Math.round(count * densityMultiplier);
+
     for (let i = 0; i < count; i++) {
-      particlesRef.current.push(new Particle(activeAura, canvas.width, canvas.height, customAuraConfig));
+      const particle = new Particle(activeAura, canvas.width, canvas.height, customAuraConfig);
+      particle.speedMultiplier = speedMultiplier;
+      particle.sizeMultiplier = sizeMultiplier;
+      particlesRef.current.push(particle);
     }
 
     const outerCanvas = outerCanvasRef.current;
@@ -1442,7 +1457,7 @@ export default function AuraStudio() {
         overlayShapeRef.current.setConfig(null);
       }
     }
-  }, [activeAura, customAuraConfig]);
+  }, [activeAura, customAuraConfig, densityMultiplier, speedMultiplier, sizeMultiplier]);
 
   const animate = useCallback(() => {
     const now = performance.now();
@@ -1762,6 +1777,69 @@ export default function AuraStudio() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Aura Controls Section */}
+                <div className="pt-4 mt-4 border-t border-white/[0.1]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sliders size={14} className="text-cyan-400" />
+                    <span className="text-xs font-semibold text-cyan-300">Aura Controls</span>
+                  </div>
+
+                  {/* Density Slider */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-medium text-gray-400">Density</label>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {(densityMultiplier * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="3"
+                      step="0.1"
+                      value={densityMultiplier}
+                      onChange={(e) => setDensityMultiplier(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((densityMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((densityMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
+                      }}
+                    />
+                  </div>
+
+                  {/* Speed Slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-medium text-gray-400">Speed</label>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {(speedMultiplier * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="3"
+                      step="0.1"
+                      value={speedMultiplier}
+                      onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((speedMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((speedMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
+                      }}
+                    />
+                  </div>
+
+                  {/* Reset Button */}
+                  <button
+                    onClick={() => {
+                      setDensityMultiplier(1.0);
+                      setSpeedMultiplier(1.0);
+                    }}
+                    className="w-full mt-3 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-cyan-500/10 transition-all"
+                  >
+                    Reset to 100%
+                  </button>
                 </div>
               </div>
             </>
