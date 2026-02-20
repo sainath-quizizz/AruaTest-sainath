@@ -36,52 +36,60 @@ const random = (min, max) => Math.random() * (max - min) + min;
 
 const OUTER_SHAPE_PRESETS = {
   [AURA_TYPES.FIRE]: {
-    shape: 'flame',
     color: '#ff5500',
     secondaryColor: '#ff8800',
     intensity: 0.85,
     speed: 1.3,
     scale: 1.15,
     pulseAmount: 0.06,
-    noiseAmount: 0.18,
-    hollowRatio: 0.55,
+    hollowRatio: 0.5,
     layers: 3,
+    radii: [1.0, 0.98, 0.95, 0.92, 0.95, 0.98, 1.0, 1.05, 1.2, 1.35, 1.2, 1.05],
+    noiseAmount: 0.04,
+    noiseSpeed: 0.8,
+    scaleX: 0.85,
   },
   [AURA_TYPES.WIND]: {
-    shape: 'vortex',
     color: '#00ffcc',
     secondaryColor: '#00ddaa',
     intensity: 0.55,
     speed: 0.9,
     scale: 1.1,
     pulseAmount: 0.04,
-    noiseAmount: 0.1,
     hollowRatio: 0.6,
     layers: 2,
+    radii: [1.06, 1.0, 0.96, 1.03, 1.08, 0.98, 0.96, 1.04, 1.1, 1.02, 0.97, 1.05],
+    noiseAmount: 0.03,
+    noiseSpeed: 0.6,
+    scaleX: 0.88,
   },
   [AURA_TYPES.ELECTRIC]: {
-    shape: 'spike',
     color: '#aa00ff',
     secondaryColor: '#dd44ff',
     intensity: 0.9,
     speed: 2.0,
     scale: 1.1,
-    pulseAmount: 0.1,
-    noiseAmount: 0.25,
-    hollowRatio: 0.55,
+    pulseAmount: 0.08,
+    hollowRatio: 0.5,
     layers: 3,
+    radii: [1.08, 0.98, 1.06, 0.96, 1.1, 0.99, 1.05, 0.97, 1.12, 1.04, 1.08, 1.0],
+    noiseAmount: 0.05,
+    noiseSpeed: 1.8,
+    scaleX: 0.88,
   },
   [AURA_TYPES.COSMIC]: {
-    shape: 'halo',
     color: '#6366f1',
     secondaryColor: '#818cf8',
     intensity: 0.6,
     speed: 0.5,
     scale: 1.15,
     pulseAmount: 0.03,
-    noiseAmount: 0.06,
     hollowRatio: 0.65,
     layers: 2,
+    radii: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+    noiseAmount: 0.02,
+    noiseSpeed: 0.3,
+    scaleX: 0.88,
   },
   [AURA_TYPES.SAKURA]: {
     color: '#ff9ec8',
@@ -89,10 +97,13 @@ const OUTER_SHAPE_PRESETS = {
     intensity: 0.45,
     speed: 0.5,
     scale: 1.0,
-    aspectRatio: 1.1,
     pulseAmount: 0.02,
-    wobble: 0.03,
+    hollowRatio: 0.65,
     layers: 2,
+    radii: [1.0, 1.02, 1.0, 0.98, 1.0, 1.03, 1.0, 0.98, 1.02, 1.05, 1.02, 0.99],
+    noiseAmount: 0.02,
+    noiseSpeed: 0.4,
+    scaleX: 0.88,
   },
 };
 
@@ -119,10 +130,36 @@ class OuterShapeRenderer {
     return { r, g, b };
   }
 
-  _noiseAt(angle, time, freq, amp) {
+  _noise(angle, time, freq, amp) {
     return Math.sin(angle * freq + time) * amp
          + Math.sin(angle * freq * 2.3 + time * 1.7) * amp * 0.5
          + Math.sin(angle * freq * 0.7 + time * 0.6) * amp * 0.3;
+  }
+
+  _catmullRom(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return 0.5 * (
+      (2 * p1) +
+      (-p0 + p2) * t +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+    );
+  }
+
+  _getRadiusAt(angle, radii) {
+    const n = radii.length;
+    const normalized = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const pos = (normalized / (Math.PI * 2)) * n;
+    const i = Math.floor(pos);
+    const frac = pos - i;
+    return this._catmullRom(
+      radii[((i - 1) % n + n) % n],
+      radii[i % n],
+      radii[(i + 1) % n],
+      radii[(i + 2) % n],
+      frac
+    );
   }
 
   draw(ctx) {
@@ -131,246 +168,68 @@ class OuterShapeRenderer {
     const cx = this.w / 2;
     const cy = this.h * 0.47;
     const baseRadius = Math.min(this.w, this.h) * 0.28 * (this.config.scale || 1.0);
-    const { color, secondaryColor, intensity, pulseAmount, noiseAmount, layers, shape } = this.config;
+    const { color, secondaryColor, intensity, pulseAmount, layers } = this.config;
+    const hollow = this.config.hollowRatio || 0.55;
+    const radii = this.config.radii || [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+    const noiseAmt = this.config.noiseAmount || 0.04;
+    const noiseSpd = this.config.noiseSpeed || 0.8;
+    const scaleX = this.config.scaleX || 0.85;
     const t = this.time;
 
     const rgb = this._hexToRgb(color);
     const rgb2 = this._hexToRgb(secondaryColor || color);
 
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
 
     for (let layer = layers; layer >= 1; layer--) {
       const layerRatio = layer / layers;
-      const radius = baseRadius * (0.85 + layerRatio * 0.35);
+      const radius = baseRadius * (0.93 + layerRatio * 0.18);
       const pulse = Math.sin(t * 2 + layer) * pulseAmount * radius;
       const r = radius + pulse;
-      const alpha = intensity * (0.15 + (1 - layerRatio) * 0.15);
+      const alpha = intensity * (0.06 + (1 - layerRatio) * 0.14);
 
-      ctx.beginPath();
-
-      switch (shape) {
-        case 'flame':
-          this._drawFlame(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'spike':
-          this._drawSpike(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'halo':
-          this._drawHalo(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'vortex':
-          this._drawVortex(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'cloud':
-          this._drawCloud(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'shield':
-          this._drawShield(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'wings':
-          this._drawWings(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'diamond':
-          this._drawDiamond(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'crescent':
-          this._drawCrescent(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        case 'star':
-          this._drawStar(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-        default:
-          this._drawFlame(ctx, cx, cy, r, t, layer, noiseAmount);
-          break;
-      }
-
-      const grad = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 1.4);
       const mixR = Math.round(rgb.r * layerRatio + rgb2.r * (1 - layerRatio));
       const mixG = Math.round(rgb.g * layerRatio + rgb2.g * (1 - layerRatio));
       const mixB = Math.round(rgb.b * layerRatio + rgb2.b * (1 - layerRatio));
-      grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},${alpha * 0.8})`);
-      grad.addColorStop(0.5, `rgba(${mixR},${mixG},${mixB},${alpha * 0.4})`);
+
+      ctx.beginPath();
+      const segments = 120;
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        const radiusMul = this._getRadiusAt(angle, radii);
+        const extension = Math.max(0, radiusMul - 1.0) / 0.35;
+        const localNoise = noiseAmt * (1 + extension * 2.5);
+        const n = this._noise(angle, t * noiseSpd + layer * 0.5, 2, localNoise * r);
+
+        const pr = r * radiusMul + n;
+        const x = cx + Math.cos(angle) * pr * scaleX;
+        const y = cy + Math.sin(angle) * pr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+
+      const gradR = r * 1.25;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR);
+      const h = hollow;
+
+      grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},0)`);
+      grad.addColorStop(h * 0.6, `rgba(${mixR},${mixG},${mixB},0)`);
+      grad.addColorStop(h * 0.82, `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`);
+      grad.addColorStop(h, `rgba(${mixR},${mixG},${mixB},${alpha * 0.5})`);
+      grad.addColorStop(Math.min(h + 0.12, 0.88), `rgba(${mixR},${mixG},${mixB},${alpha})`);
+      grad.addColorStop(0.95, `rgba(${mixR},${mixG},${mixB},${alpha * 0.25})`);
       grad.addColorStop(1, `rgba(${mixR},${mixG},${mixB},0)`);
 
+      ctx.globalCompositeOperation = 'screen';
       ctx.fillStyle = grad;
       ctx.fill();
 
-      ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.6})`;
-      ctx.lineWidth = 2 - layerRatio;
-      ctx.shadowBlur = 15 * layerRatio;
-      ctx.shadowColor = `rgba(${mixR},${mixG},${mixB},${alpha})`;
+      ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`;
+      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
-  }
-
-  _drawFlame(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 1.5 + layer, 3, noise * r);
-      const topBias = Math.max(0, -Math.sin(angle)) * r * 0.35;
-      const flickerTop = Math.max(0, -Math.sin(angle)) * Math.sin(t * 3 + angle * 5) * r * 0.12;
-      const pr = r + n + topBias + flickerTop;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawSpike(ctx, cx, cy, r, t, layer, noise) {
-    const spikes = 12;
-    const segments = spikes * 2;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const isSpike = i % 2 === 0;
-      const spikeLen = isSpike ? r * (0.3 + Math.sin(t * 3 + i) * 0.15) : 0;
-      const n = this._noiseAt(angle, t * 2 + layer, 4, noise * r * 0.5);
-      const jitter = isSpike ? Math.sin(t * 5 + i * 2.7) * r * 0.08 : 0;
-      const pr = r + n + spikeLen + jitter;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawHalo(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 0.5 + layer, 2, noise * r * 0.5);
-      const breathe = Math.sin(t * 0.8 + layer * 0.5) * r * 0.03;
-      const pr = r + n + breathe;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawVortex(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    const spiralOffset = t * 0.8 + layer * 0.5;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t + layer, 3, noise * r);
-      const spiral = Math.sin(angle * 3 + spiralOffset) * r * 0.12;
-      const pr = r + n + spiral;
-      const x = cx + Math.cos(angle + spiralOffset * 0.1) * pr;
-      const y = cy + Math.sin(angle + spiralOffset * 0.1) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawCloud(ctx, cx, cy, r, t, layer, noise) {
-    const bumps = 8;
-    const segments = bumps * 10;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 0.7 + layer, 2, noise * r);
-      const bulge = Math.abs(Math.sin(angle * bumps * 0.5 + t * 0.5)) * r * 0.15;
-      const pr = r + n + bulge;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawShield(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 0.4 + layer, 1.5, noise * r * 0.3);
-      const pointy = Math.pow(Math.abs(Math.cos(angle)), 0.6) * r * 0.15;
-      const vertStretch = 1 + Math.abs(Math.sin(angle)) * 0.15;
-      const pr = (r + n + pointy) * vertStretch;
-      const x = cx + Math.cos(angle) * pr * 0.9;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawWings(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    const flapPhase = Math.sin(t * 1.5) * 0.15;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t + layer, 2, noise * r * 0.5);
-      const sideExtend = Math.pow(Math.abs(Math.cos(angle)), 1.5) * r * 0.5;
-      const flap = Math.abs(Math.cos(angle)) > 0.3
-        ? Math.cos(angle) > 0 ? flapPhase * r : -flapPhase * r
-        : 0;
-      const pr = r + n + sideExtend;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr + flap;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawDiamond(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 0.6 + layer, 2, noise * r * 0.3);
-      const diamond = (Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle))) * r * 0.2;
-      const pr = r * 0.85 + diamond + n;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawCrescent(ctx, cx, cy, r, t, layer, noise) {
-    const segments = 80;
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const n = this._noiseAt(angle, t * 0.5 + layer, 2, noise * r * 0.4);
-      const indent = Math.max(0, Math.cos(angle + 0.3)) * r * 0.25;
-      const pr = r + n - indent;
-      const x = cx + Math.cos(angle) * pr;
-      const y = cy + Math.sin(angle) * pr;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  }
-
-  _drawStar(ctx, cx, cy, r, t, layer, noise) {
-    const points = 5;
-    const totalSegments = points * 2;
-    const stepSegments = 6;
-    const allPoints = [];
-    for (let i = 0; i < totalSegments; i++) {
-      const angle = (i / totalSegments) * Math.PI * 2 - Math.PI / 2;
-      const isOuter = i % 2 === 0;
-      const n = this._noiseAt(angle, t * 0.8 + layer, 2, noise * r * 0.3);
-      const pr = isOuter ? r * 1.15 + n : r * 0.65 + n * 0.5;
-      allPoints.push({
-        x: cx + Math.cos(angle) * pr,
-        y: cy + Math.sin(angle) * pr,
-      });
-    }
-    ctx.moveTo(allPoints[0].x, allPoints[0].y);
-    for (let i = 0; i < allPoints.length; i++) {
-      const next = allPoints[(i + 1) % allPoints.length];
-      const curr = allPoints[i];
-      for (let s = 1; s <= stepSegments; s++) {
-        const frac = s / stepSegments;
-        const x = curr.x + (next.x - curr.x) * frac;
-        const y = curr.y + (next.y - curr.y) * frac;
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.closePath();
   }
 }
 
@@ -1017,76 +876,204 @@ class Particle {
 }
 
 
-const DEFAULT_SYSTEM_PROMPT = `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
+// ============================================================================
+// SYSTEM PROMPT - LAYER 1: GLOW CONFIGURATION
+// Controls: glowColor, background, renderMode, density
+// ============================================================================
+const PROMPT_LAYER_GLOW = `=== GLOW LAYER SPEC ===
 
-=== ENGINE SPEC ===
+glowColor: Primary hex color for the overall aura theme. This color is used for:
+- Avatar drop-shadow glow effect
+- Ambient background radial gradient
+- Should match the dominant theme color
+
+background: Canvas clearing behavior between frames
+- "clear": Full transparency, no trails (clean look, good for discrete particles)
+- "dark-fade": Soft dark overlay (rgba 10,10,15,0.2) — creates motion trails, good for fire/energy
+- "black-fade": Stronger dark overlay (rgba 0,0,0,0.3) — more prominent trails, good for cosmic/magic
+
+renderMode: Particle rendering approach
+- "discrete": Solid distinct particles (characters, sparks, objects)
+- "fluid": Smoke/fog mode — engine auto-expands particles as radial-gradient blobs for seamless blending
+
+density: Number of particles (50-200 for discrete, 60-80 for fluid)
+
+Glow Schema:
+{
+  "glowColor": "#hex",
+  "background": "clear" | "dark-fade" | "black-fade",
+  "renderMode": "discrete" | "fluid",
+  "density": number
+}
+
+Glow Examples:
+- Fire/energy: glowColor="#ff5500", background="dark-fade", renderMode="discrete", density=180
+- Mystic fog: glowColor="#9ca3af", background="clear", renderMode="fluid", density=70
+- Cosmic: glowColor="#6366f1", background="black-fade", renderMode="discrete", density=100
+- Cute characters: glowColor="#f9a8d4", background="clear", renderMode="discrete", density=50`;
+
+// ============================================================================
+// SYSTEM PROMPT - LAYER 2: PARTICLE CONFIGURATION
+// Controls: entities array (shapes, movement, style, size, speed)
+// ============================================================================
+const PROMPT_LAYER_PARTICLE = `=== PARTICLE LAYER SPEC ===
 
 Coordinates: center=(0,0), range -0.5 to 0.5 relative to particle size. Negative vy = UP, positive vy = DOWN.
 
 Shapes (layered bottom-to-top in each entity):
-circle: {type,cx,cy,r,fill}, ellipse: {type,cx,cy,rx,ry,fill}, rect: {type,x,y,w,h,fill}, triangle: {type,points:[x1,y1,x2,y2,x3,y3],fill}, line: {type,x1,y1,x2,y2,stroke,width}, arc: {type,cx,cy,r,startAngle,endAngle,fill?,stroke?}, polygon: {type,points:[...],fill}. All support optional stroke/strokeWidth.
+- circle: {type,cx,cy,r,fill}
+- ellipse: {type,cx,cy,rx,ry,fill}
+- rect: {type,x,y,w,h,fill}
+- triangle: {type,points:[x1,y1,x2,y2,x3,y3],fill}
+- line: {type,x1,y1,x2,y2,stroke,width}
+- arc: {type,cx,cy,r,startAngle,endAngle,fill?,stroke?}
+- polygon: {type,points:[...],fill}
+All shapes support optional stroke/strokeWidth.
 
-Styles: "solid" (opaque, for characters/objects), "smoke" (wispy, for fire/fog/mist), "glow" (bright halo, for energy/magic/stars).
+Styles:
+- "solid": Opaque particles (characters, objects, icons)
+- "smoke": Wispy multi-layer effect (fire, fog, mist)
+- "glow": Bright halo with additive blending (energy, magic, stars)
 
-Movement presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"
-Movement custom object: {gravity:(-0.1 to 0.1), friction:(0.9-1.0), wave:{axis,amp,freq}, attract:(-0.005 to 0.005), spin:(-2 to 2), jitter:(0-0.3), bounce:{floor,elasticity}, scale:(0.97-1.03)}
+Movement Presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"
 
-renderMode: "discrete" (solid objects/characters/sparks) or "fluid" (smoke/fog/mist — engine auto-expands particles as radial-gradient blobs).
-Fluid rules: style="smoke", density 60-80, size [20,35], vy [-1.8,-0.5], one circle shape per entity.
+Movement Custom Object:
+{
+  gravity: -0.1 to 0.1,
+  friction: 0.9-1.0,
+  wave: {axis:"x"|"y"|"both", amp:0.1-5, freq:0.1-5},
+  attract: -0.005 to 0.005,
+  spin: -2 to 2,
+  jitter: 0-0.3,
+  bounce: {floor:0.5-0.9, elasticity:0.1-0.9},
+  scale: 0.97-1.03
+}
 
-outerShape: An animated glowing HOLLOW ring/shell rendered ON TOP of particles, wrapping outside the avatar. Center is fully transparent — only the outer edge is visible as a radiating energy shape.
-outerShape.shape: "flame"|"spike"|"halo"|"vortex"|"cloud"|"shield"|"wings"|"diamond"|"crescent"|"star"
-outerShape.color: primary hex color (matches glowColor theme)
-outerShape.secondaryColor: secondary hex color for gradient layers
-outerShape.intensity: 0.3-1.0 (glow brightness)
-outerShape.speed: 0.3-3.0 (animation speed)
-outerShape.scale: 0.8-1.3 (size multiplier)
-outerShape.pulseAmount: 0.02-0.12 (breathing/pulse strength)
-outerShape.noiseAmount: 0.03-0.3 (edge distortion)
-outerShape.hollowRatio: 0.45-0.75 (how hollow the center is; 0.5 = thick ring, 0.7 = thin ring)
-outerShape.layers: 1-4 (number of concentric glow layers)
+Fluid Mode Rules (when renderMode="fluid"):
+- style must be "smoke"
+- density 60-80
+- size [20,35]
+- vy [-1.8,-0.5]
+- one circle shape per entity
 
-Shape selection guide:
-- "flame" — fire, energy, rage, power-ups, super saiyan (sharp upward spikes)
-- "spike" — electric, lightning, aggressive, punk (radiating spikes all around)
-- "halo" — holy, calm, cosmic, zen, serene (smooth glowing ring)
-- "vortex" — wind, tornado, swirl, magic (spiraling edge)
-- "cloud" — smoke, fog, soft, dreamy (bumpy soft edge)
-- "shield" — defense, armor, protection, barrier (tall rounded shape)
-- "wings" — angel, bird, freedom, flight (extends sideways)
-- "diamond" — crystal, gem, luxury, ice (angular faceted edge)
-- "crescent" — moon, night, dark, mystic (indented on one side)
-- "star" — heroic, stellar, sparkle, fame (5-point star outline)
+Entity Schema:
+{
+  "weight": number (spawn probability relative to others),
+  "size": [min, max],
+  "speed": {"vx": [min, max], "vy": [min, max]},
+  "style": "solid" | "smoke" | "glow",
+  "movement": string_preset | custom_object,
+  "shapes": [shape_objects...]
+}
 
-Schema:
-{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","outerShape":{"shape":"string","color":"#hex","secondaryColor":"#hex","intensity":number,"speed":number,"scale":number,"pulseAmount":number,"noiseAmount":number,"hollowRatio":number,"layers":number},"entities":[{"weight":number,"size":[min,max],"speed":{"vx":[min,max],"vy":[min,max]},"style":"solid"|"smoke"|"glow","movement":string_or_object,"shapes":[...]}]}
+Particle Examples:
 
-=== EXAMPLES ===
+Fire flames entity:
+{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]}
+
+Cat face entity:
+{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}
+
+Lightning bolt entity:
+{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}`;
+
+// ============================================================================
+// SYSTEM PROMPT - LAYER 3: OUTER SHAPE CONFIGURATION
+// Controls: outerShape object (animated hollow ring around avatar)
+// ============================================================================
+const PROMPT_LAYER_OUTERSHAPE = `=== OUTER SHAPE LAYER SPEC ===
+
+outerShape: An animated glowing HOLLOW ring/shell rendered ON TOP of particles, wrapping outside the avatar. Center is fully transparent — only the outer edge band is visible as a radiating energy silhouette. The shape is defined by a "radii" array.
+
+Properties:
+- color: Primary hex color (should match glowColor theme)
+- secondaryColor: Secondary hex for gradient layers
+- intensity: 0.3-1.0 (glow brightness)
+- speed: 0.3-3.0 (animation speed)
+- scale: 0.8-1.3 (overall size multiplier)
+- pulseAmount: 0.02-0.12 (breathing/pulse strength)
+- hollowRatio: 0.45-0.75 (0.5 = thick ring, 0.7 = thin ring)
+- layers: 1-4 (number of concentric glow layers)
+- radii: Array of exactly 12 numbers (radius multipliers at 30° intervals)
+- noiseAmount: 0.01-0.08 (organic edge distortion)
+- noiseSpeed: 0.3-2.0 (edge noise animation speed)
+- scaleX: 0.8-0.95 (horizontal squeeze; 0.85 = egg-shaped, 0.95 = round)
+
+Radii Array Design (index → angle):
+- 0: right (0°)
+- 1-2: lower-right (30°-60°)
+- 3: bottom (90°)
+- 4-5: lower-left (120°-150°)
+- 6: left (180°)
+- 7-8: upper-left (210°-240°)
+- 9: top (270°)
+- 10-11: upper-right (300°-330°)
+
+Values range 0.85-1.5. Higher value = shape extends outward at that angle.
+
+Radii Design Patterns:
+- Fire/flame: indices 7-11 high (1.15-1.4), indices 2-4 low (0.9-0.95) → upward flame
+- Calm/holy/cosmic: all ~1.0 → smooth circle
+- Electric/chaotic: alternating high/low (0.95-1.15) → jagged irregular
+- Wind/swirl: gentle wave pattern (alternate 0.95-1.1)
+- Dark/infernal: indices 2-4 high (1.1-1.2), top low → dripping downward
+- Shield/defensive: indices 0,6 slightly high (1.05-1.1), 3,9 high (1.1-1.15) → rounded rectangle
+
+OuterShape Schema:
+{
+  "color": "#hex",
+  "secondaryColor": "#hex",
+  "intensity": number,
+  "speed": number,
+  "scale": number,
+  "pulseAmount": number,
+  "hollowRatio": number,
+  "layers": number,
+  "radii": [12 numbers],
+  "noiseAmount": number,
+  "noiseSpeed": number,
+  "scaleX": number
+}
+
+OuterShape Examples:
+
+Fire aura:
+{"color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.98,0.95,0.92,0.95,0.98,1.0,1.05,1.2,1.35,1.2,1.05],"noiseAmount":0.04,"noiseSpeed":0.8,"scaleX":0.85}
+
+Calm/subtle:
+{"color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.6,"layers":2,"radii":[1.0,1.02,1.0,0.98,1.0,1.03,1.0,0.98,1.02,1.06,1.02,0.99],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.88}
+
+Super saiyan:
+{"color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.97,0.93,0.9,0.93,0.97,1.0,1.08,1.25,1.4,1.25,1.08],"noiseAmount":0.04,"noiseSpeed":0.9,"scaleX":0.84}`;
+
+// ============================================================================
+// COMBINED EXAMPLES (full JSON for LLM context)
+// ============================================================================
+const PROMPT_EXAMPLES = `=== FULL EXAMPLES ===
 
 User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"flame","color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"noiseAmount":0.18,"hollowRatio":0.55,"layers":3},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
+{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.98,0.95,0.92,0.95,0.98,1.0,1.05,1.2,1.35,1.2,1.05],"noiseAmount":0.04,"noiseSpeed":0.8,"scaleX":0.85},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
 User: "super saiyan"
-{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"flame","color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"noiseAmount":0.2,"hollowRatio":0.5,"layers":3},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
+{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.97,0.93,0.9,0.93,0.97,1.0,1.08,1.25,1.4,1.25,1.08],"noiseAmount":0.04,"noiseSpeed":0.9,"scaleX":0.84},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
 
 User: "mystic fog"
-{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"shape":"cloud","color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"noiseAmount":0.12,"hollowRatio":0.6,"layers":2},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
+{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.6,"layers":2,"radii":[1.0,1.02,1.0,0.98,1.0,1.03,1.0,0.98,1.02,1.06,1.02,0.99],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.88},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
 
 User: "floating cat faces"
-{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"shape":"halo","color":"#f9a8d4","secondaryColor":"#f472b6","intensity":0.45,"speed":0.6,"scale":1.1,"pulseAmount":0.03,"noiseAmount":0.06,"hollowRatio":0.65,"layers":2},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
+{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"color":"#f9a8d4","secondaryColor":"#f472b6","intensity":0.45,"speed":0.6,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.65,"layers":2,"radii":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"noiseAmount":0.02,"noiseSpeed":0.3,"scaleX":0.88},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
 
-User: "pokemon aura" (generic franchise — multiple different characters)
-{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"shape":"star","color":"#EF4444","secondaryColor":"#FBBF24","intensity":0.6,"speed":0.8,"scale":1.1,"pulseAmount":0.05,"noiseAmount":0.08,"hollowRatio":0.6,"layers":2},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}
+User: "pokemon aura"
+{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#EF4444","secondaryColor":"#FBBF24","intensity":0.6,"speed":0.8,"scale":1.1,"pulseAmount":0.05,"hollowRatio":0.6,"layers":2,"radii":[1.05,1.0,0.98,1.02,1.06,1.0,1.04,1.0,1.02,1.08,1.04,1.0],"noiseAmount":0.03,"noiseSpeed":0.5,"scaleX":0.88},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
 
-=== TASK ===
-
-Based on the spec and examples above, generate a particle configuration for:
-
-"\${userPrompt}"
+// ============================================================================
+// TASK INSTRUCTIONS (interpretation rules and constraints)
+// ============================================================================
+const PROMPT_TASK_INSTRUCTIONS = `=== TASK INSTRUCTIONS ===
 
 How to interpret the request:
 - Power/energy/effect words ("super saiyan", "fire aura", "ice storm") → visual aura effect with themed particles. Use 2-3 entities with mixed styles. ALL entities must use colors that match the theme — e.g. fire = reds/oranges/yellows only, ice = blues/whites/cyans only. NEVER add white, gray, or off-theme colored smoke/glow/orbs to an effect aura.
-- Request describes a specific shape or character ( "Pikachu", "stars") → generate ONLY that shape/character. One entity. Nothing else.
+- Request describes a specific shape or character ("Pikachu", "stars") → generate ONLY that shape/character. One entity. Nothing else.
 - Request names a group or franchise without one specific thing ("Paw Patrol", "pokemon aura", "floating animals") → generate 2-3 different characters from that group. Each entity is a different character. All style:"solid", size [24,34].
 - Ambiguous → default to effect aura.
 
@@ -1102,7 +1089,31 @@ Constraints:
 - Every entity must have at least 3 shapes so it looks like something recognizable.
 - Valid JSON with commas between all array elements.
 - Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.
-- ALWAYS include an "outerShape" object. Pick a shape that matches the theme (e.g. fire→"flame", electric→"spike", ice→"diamond", cosmic→"halo", wind→"vortex", holy→"wings", dark→"crescent", heroic→"star", defensive→"shield", soft→"cloud"). Colors must match glowColor theme. hollowRatio 0.5-0.55 for intense auras, 0.6-0.7 for subtle ones.`;
+- ALWAYS include an "outerShape" object. Design the "radii" array to match the aura theme — fire/energy: extend top (indices 7-11 high), calm/holy: uniform ~1.0, electric: irregular alternating, dark: extend bottom (indices 2-4 high). Colors must match glowColor theme. hollowRatio 0.5-0.55 for intense auras, 0.6-0.7 for subtle ones. scaleX 0.83-0.88 for egg-shaped, 0.9-0.95 for rounder.
+
+Output Schema:
+{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","outerShape":{...},"entities":[...]}`;
+
+// ============================================================================
+// FUNCTION TO BUILD COMBINED PROMPT FOR LLM
+// ============================================================================
+const buildSystemPrompt = (glowPrompt, particlePrompt, outerShapePrompt, userPrompt) => {
+  return `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
+
+${glowPrompt}
+
+${particlePrompt}
+
+${outerShapePrompt}
+
+${PROMPT_EXAMPLES}
+
+${PROMPT_TASK_INSTRUCTIONS}
+
+=== GENERATE FOR ===
+
+"${userPrompt}"`;
+};
 
 export default function AuraStudio() {
   const [activeAura, setActiveAura] = useState(AURA_TYPES.NONE);
@@ -1112,13 +1123,21 @@ export default function AuraStudio() {
   const [promptInput, setPromptInput] = useState("");
   const [customAuraConfig, setCustomAuraConfig] = useState(null);
   const [showDevPanel, setShowDevPanel] = useState(true);
-  const [adminPrompt, setAdminPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [showOverlayOnAvatar, setShowOverlayOnAvatar] = useState(false);
+  
+  // Segregated system prompt layers for dev editing
+  const [promptGlow, setPromptGlow] = useState(PROMPT_LAYER_GLOW);
+  const [promptParticle, setPromptParticle] = useState(PROMPT_LAYER_PARTICLE);
+  const [promptOuterShape, setPromptOuterShape] = useState(PROMPT_LAYER_OUTERSHAPE);
+  const [activePromptTab, setActivePromptTab] = useState('glow');
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
+  const overlayCanvasRef = useRef(null);
   const animationRef = useRef(null);
   const particlesRef = useRef([]);
   const outerShapeRef = useRef(null);
+  const overlayShapeRef = useRef(null);
   const fileInputRef = useRef(null);
   const lastFrameTimeRef = useRef(performance.now());
 
@@ -1136,7 +1155,8 @@ export default function AuraStudio() {
     setAiLoading(true);
     setAiMessage("The Alchemist is designing particle physics...");
 
-    const finalPrompt = adminPrompt.replace('${userPrompt}', promptInput);
+    // Build combined prompt from segregated system prompt layers
+    const finalPrompt = buildSystemPrompt(promptGlow, promptParticle, promptOuterShape, promptInput);
 
     try {
       const text = await callLLMText(finalPrompt);
@@ -1203,6 +1223,24 @@ export default function AuraStudio() {
         outerShapeRef.current.setConfig(null);
       }
     }
+
+    // Initialize overlay shape renderer (same config as outer shape)
+    const overlayCanvas = overlayCanvasRef.current;
+    if (overlayCanvas) {
+      if (!overlayShapeRef.current) {
+        overlayShapeRef.current = new OuterShapeRenderer(overlayCanvas.width, overlayCanvas.height);
+      }
+      overlayShapeRef.current.w = overlayCanvas.width;
+      overlayShapeRef.current.h = overlayCanvas.height;
+
+      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
+        overlayShapeRef.current.setConfig(customAuraConfig.outerShape);
+      } else if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
+        overlayShapeRef.current.setConfig(OUTER_SHAPE_PRESETS[activeAura]);
+      } else {
+        overlayShapeRef.current.setConfig(null);
+      }
+    }
   }, [activeAura, customAuraConfig]);
 
   const animate = useCallback(() => {
@@ -1258,8 +1296,40 @@ export default function AuraStudio() {
       outerShapeRef.current.draw(outerCtx);
     }
 
+    // Render overlay on top of avatar (if enabled)
+    const overlayCanvas = overlayCanvasRef.current;
+    if (overlayCanvas && showOverlayOnAvatar) {
+      const overlayCtx = overlayCanvas.getContext('2d');
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      
+      // Initialize overlay renderer if needed
+      if (!overlayShapeRef.current) {
+        overlayShapeRef.current = new OuterShapeRenderer(overlayCanvas.width, overlayCanvas.height);
+      }
+      
+      // Update dimensions to match canvas
+      overlayShapeRef.current.w = overlayCanvas.width;
+      overlayShapeRef.current.h = overlayCanvas.height;
+      
+      // Sync config from outer shape
+      if (outerShapeRef.current && outerShapeRef.current.config) {
+        overlayShapeRef.current.setConfig(outerShapeRef.current.config);
+      }
+      
+      if (overlayShapeRef.current.config) {
+        overlayShapeRef.current.update(dt);
+        overlayCtx.save();
+        overlayCtx.globalAlpha = 0.35; // 65% transparency - more visible for testing
+        overlayShapeRef.current.draw(overlayCtx);
+        overlayCtx.restore();
+      }
+    } else if (overlayCanvas) {
+      const overlayCtx = overlayCanvas.getContext('2d');
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+
     animationRef.current = requestAnimationFrame(animate);
-  }, [activeAura, customAuraConfig]);
+  }, [activeAura, customAuraConfig, showOverlayOnAvatar]);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -1269,6 +1339,10 @@ export default function AuraStudio() {
     if (outerCanvasRef.current) {
       outerCanvasRef.current.width = 600;
       outerCanvasRef.current.height = 700;
+    }
+    if (overlayCanvasRef.current) {
+      overlayCanvasRef.current.width = 600;
+      overlayCanvasRef.current.height = 700;
     }
     lastFrameTimeRef.current = performance.now();
     animationRef.current = requestAnimationFrame(animate);
@@ -1284,6 +1358,7 @@ export default function AuraStudio() {
 
   return (
     <div className="h-screen bg-black text-white font-sans overflow-hidden flex flex-col relative select-none">
+    <h1 style={{color: "red"}}>sainath</h1>
       {/* Ambient background glow that follows the aura color */}
       <div
         className="absolute inset-0 transition-all duration-1000 pointer-events-none"
@@ -1306,6 +1381,20 @@ export default function AuraStudio() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Overlay on avatar toggle */}
+          <button
+            onClick={() => setShowOverlayOnAvatar(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              showOverlayOnAvatar
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                : 'text-gray-400 border-gray-700 hover:text-purple-300 hover:border-purple-500/40 hover:bg-purple-500/10'
+            }`}
+            title="Toggle outer shape overlay on avatar (85% transparency)"
+          >
+            <Sparkles size={12} />
+            Overlay
+          </button>
+
           {/* Dev prompt editor toggle */}
           <button
             onClick={() => setShowDevPanel(v => !v)}
@@ -1354,16 +1443,32 @@ export default function AuraStudio() {
             {/* Avatar */}
             <div className="relative z-20 w-72 h-72 md:w-96 md:h-96 transition-all duration-700 ease-out">
               {avatar ? (
-                <img
-                  src={avatar}
-                  alt="Avatar"
-                  className="w-full h-full object-contain transition-all duration-700"
-                  style={{
-                    filter: hasAura
-                      ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))`
-                      : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
-                  }}
-                />
+                <>
+                  <img
+                    src={avatar}
+                    alt="Avatar"
+                    className="w-full h-full object-contain transition-all duration-700"
+                    style={{
+                      filter: hasAura
+                        ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))`
+                        : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
+                    }}
+                  />
+                  {/* Overlay canvas — renders outer shape ON TOP of avatar with transparency */}
+                  <canvas
+                    ref={overlayCanvasRef}
+                    width={600}
+                    height={700}
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    style={{ 
+                      transform: 'translate(-50%, -50%)',
+                      top: '50%',
+                      left: '50%',
+                      width: '150%',
+                      height: '150%'
+                    }}
+                  />
+                </>
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
@@ -1493,31 +1598,87 @@ export default function AuraStudio() {
         {/* Right: Dev panel */}
         <div
           className={`flex-shrink-0 border-l border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${
-            showDevPanel ? 'w-80' : 'w-0 overflow-hidden border-l-0'
+            showDevPanel ? 'w-96' : 'w-0 overflow-hidden border-l-0'
           }`}
         >
           {showDevPanel && (
             <>
-              <div className="flex items-center justify-between px-3 py-2.5 border-b border-amber-500/10 bg-amber-500/[0.03] flex-shrink-0">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-mono text-amber-400/80 tracking-widest uppercase">System Prompt</span>
-                  <span className="text-[9px] text-gray-600">
-                    Use <code className="text-amber-500/60">{'${userPrompt}'}</code> as placeholder
-                  </span>
+              {/* Tab header */}
+              <div className="flex items-center justify-between px-2 py-2 border-b border-amber-500/10 bg-amber-500/[0.03] flex-shrink-0">
+                <div className="flex gap-1">
+                  {[
+                    { id: 'glow', label: 'Glow', color: '#ff9500' },
+                    { id: 'particle', label: 'Particle', color: '#00d4ff' },
+                    { id: 'outerShape', label: 'OuterShape', color: '#a855f7' },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActivePromptTab(tab.id)}
+                      className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${
+                        activePromptTab === tab.id
+                          ? 'text-white'
+                          : 'text-gray-600 hover:text-gray-400'
+                      }`}
+                      style={activePromptTab === tab.id ? {
+                        background: `${tab.color}20`,
+                        color: tab.color,
+                        border: `1px solid ${tab.color}40`
+                      } : {}}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
                 <button
-                  onClick={() => setAdminPrompt(DEFAULT_SYSTEM_PROMPT)}
+                  onClick={() => {
+                    if (activePromptTab === 'glow') setPromptGlow(PROMPT_LAYER_GLOW);
+                    else if (activePromptTab === 'particle') setPromptParticle(PROMPT_LAYER_PARTICLE);
+                    else setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                  }}
                   className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-amber-500/10"
                 >
                   Reset
                 </button>
               </div>
+
+              {/* Tab description */}
+              <div className="px-3 py-2 border-b border-white/[0.04] bg-black/20">
+                <span className="text-[9px] text-gray-500">
+                  {activePromptTab === 'glow' && 'Controls: glowColor, background, renderMode, density'}
+                  {activePromptTab === 'particle' && 'Controls: entities array (shapes, movement, style, size, speed)'}
+                  {activePromptTab === 'outerShape' && 'Controls: outerShape object (animated hollow ring)'}
+                </span>
+              </div>
+
+              {/* Textarea for active tab */}
               <textarea
-                value={adminPrompt}
-                onChange={(e) => setAdminPrompt(e.target.value)}
+                value={
+                  activePromptTab === 'glow' ? promptGlow :
+                  activePromptTab === 'particle' ? promptParticle :
+                  promptOuterShape
+                }
+                onChange={(e) => {
+                  if (activePromptTab === 'glow') setPromptGlow(e.target.value);
+                  else if (activePromptTab === 'particle') setPromptParticle(e.target.value);
+                  else setPromptOuterShape(e.target.value);
+                }}
                 className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed"
                 spellCheck={false}
               />
+
+              {/* Reset all button */}
+              <div className="px-3 py-2 border-t border-white/[0.04] bg-black/20 flex justify-end">
+                <button
+                  onClick={() => {
+                    setPromptGlow(PROMPT_LAYER_GLOW);
+                    setPromptParticle(PROMPT_LAYER_PARTICLE);
+                    setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                  }}
+                  className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+                >
+                  Reset All Layers
+                </button>
+              </div>
             </>
           )}
         </div>
