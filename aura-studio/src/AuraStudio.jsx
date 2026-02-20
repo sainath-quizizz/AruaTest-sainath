@@ -579,6 +579,96 @@ class Particle {
             this.vy += vdy * 0.001;
             break;
           }
+          case 'levitate': {
+            // Smooth upward float with gentle side-to-side oscillation (bubble-like)
+            this.vy -= 0.015;
+            this.x += Math.sin(this.movementPhase * 1.2) * 0.8;
+            this.vx *= 0.95;
+            break;
+          }
+          case 'fountain': {
+            // Parabolic arc - shoot upward then fall back down
+            this.vy += 0.06;
+            this.x += Math.sin(this.movementPhase * 0.5) * 0.2;
+            if (this.y > this.h * 0.8) {
+              this.vy = random(-3, -2);
+            }
+            break;
+          }
+          case 'wave': {
+            // Horizontal wave motion like water
+            const waveAmplitude = Math.sin(this.movementPhase * 1.5) * 2.5;
+            this.x += waveAmplitude;
+            this.y += Math.sin(this.movementPhase * 2) * 0.3;
+            break;
+          }
+          case 'tornado': {
+            // Strong upward spiral
+            const tornadoRadius = (this.h * 0.6 - this.y) * 0.15;
+            this.x += Math.cos(this.movementPhase * 3) * tornadoRadius * 0.2;
+            this.vx = Math.cos(this.movementPhase * 3) * 1.5;
+            this.vy -= 0.08;
+            break;
+          }
+          case 'drift': {
+            // Slow diagonal upward drift
+            this.vy -= 0.008;
+            this.vx += random(-0.05, 0.05);
+            this.x += Math.sin(this.movementPhase * 0.6) * 0.4;
+            break;
+          }
+          case 'flutter': {
+            // Erratic upward motion (butterfly-like)
+            this.vy -= random(0.01, 0.03);
+            this.vx += random(-0.3, 0.3);
+            this.x += Math.sin(this.movementPhase * 4) * random(0.5, 1.5);
+            this.y += Math.cos(this.movementPhase * 3) * random(0.2, 0.8);
+            this.vx *= 0.96;
+            break;
+          }
+          case 'whirlpool': {
+            // Inward spiral with downward pull
+            const wpdx = centerX - this.x;
+            const wpdy = centerY - this.y;
+            const wpdist = Math.sqrt(wpdx * wpdx + wpdy * wpdy) || 1;
+            this.vx += (wpdy / wpdist) * 0.25;
+            this.vy += (-wpdx / wpdist) * 0.25;
+            this.vx += wpdx * 0.003;
+            this.vy += wpdy * 0.003 + 0.02;
+            break;
+          }
+          case 'magnetic': {
+            // Alternating attract and repel from center
+            const mdx = centerX - this.x;
+            const mdy = centerY - this.y;
+            const magneticForce = Math.sin(this.movementPhase) * 0.05;
+            this.vx += mdx * magneticForce;
+            this.vy += mdy * magneticForce;
+            this.vx *= 0.98;
+            this.vy *= 0.98;
+            break;
+          }
+          case 'gravity': {
+            // Simple gravity fall
+            this.vy += 0.12;
+            this.vx *= 0.99;
+            if (this.y > this.h * 0.9) {
+              this.reset();
+            }
+            break;
+          }
+          case 'hover': {
+            // Stay near spawn point with gentle bobbing
+            if (!this.spawnX) this.spawnX = this.x;
+            if (!this.spawnY) this.spawnY = this.y;
+            const hoverDx = this.spawnX - this.x;
+            const hoverDy = this.spawnY - this.y;
+            this.vx += hoverDx * 0.01;
+            this.vy += hoverDy * 0.01 + Math.sin(this.movementPhase * 1.5) * 0.03;
+            this.vx *= 0.95;
+            this.vy *= 0.95;
+            break;
+          }
         }
       }
 
@@ -935,7 +1025,7 @@ Styles:
 - "smoke": Wispy multi-layer effect (fire, fog, mist)
 - "glow": Bright halo with additive blending (energy, magic, stars)
 
-Movement Presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"
+Movement Presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"|"levitate"|"fountain"|"wave"|"tornado"|"drift"|"flutter"|"whirlpool"|"magnetic"|"gravity"|"hover"
 
 Movement Custom Object:
 {
@@ -1130,6 +1220,8 @@ export default function AuraStudio() {
   const [promptParticle, setPromptParticle] = useState(PROMPT_LAYER_PARTICLE);
   const [promptOuterShape, setPromptOuterShape] = useState(PROMPT_LAYER_OUTERSHAPE);
   const [activePromptTab, setActivePromptTab] = useState('glow');
+  const [selectedPhysics, setSelectedPhysics] = useState([]);
+  const [showPhysicsPanel, setShowPhysicsPanel] = useState(true);
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
@@ -1181,6 +1273,81 @@ export default function AuraStudio() {
       setAiMessage(`Failed: ${e.message}`);
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const togglePhysics = (physics) => {
+    setSelectedPhysics(prev => {
+      const newSelection = prev.includes(physics)
+        ? prev.filter(p => p !== physics)
+        : [...prev, physics];
+
+      // Apply physics automatically after updating selection
+      setTimeout(() => {
+        if (newSelection.length > 0) {
+          applyPhysicsWithSelection(newSelection);
+        }
+      }, 0);
+
+      return newSelection;
+    });
+  };
+
+  const applyPhysicsWithSelection = (physicsSelection) => {
+    if (physicsSelection.length === 0) return;
+
+    // If there's already a custom aura, modify it
+    if (customAuraConfig && activeAura === AURA_TYPES.CUSTOM) {
+      const updatedConfig = {
+        ...customAuraConfig,
+        entities: customAuraConfig.entities.map((entity, idx) => ({
+          ...entity,
+          movement: physicsSelection.length === 1 ? physicsSelection[0] : physicsSelection[idx % physicsSelection.length]
+        }))
+      };
+      setCustomAuraConfig(updatedConfig);
+      setAiMessage(`Applied physics: ${physicsSelection.join(', ')}`);
+    } else if (activeAura !== AURA_TYPES.NONE && activeAura !== AURA_TYPES.CUSTOM) {
+      // Convert preset aura to custom with selected physics
+      const presetColors = {
+        [AURA_TYPES.FIRE]: '#ff5500',
+        [AURA_TYPES.WIND]: '#00ffcc',
+        [AURA_TYPES.ELECTRIC]: '#aa00ff',
+        [AURA_TYPES.COSMIC]: '#6366f1',
+        [AURA_TYPES.SAKURA]: '#ff9ec8'
+      };
+
+      const presetNames = {
+        [AURA_TYPES.FIRE]: 'Fire',
+        [AURA_TYPES.WIND]: 'Wind',
+        [AURA_TYPES.ELECTRIC]: 'Electric',
+        [AURA_TYPES.COSMIC]: 'Cosmic',
+        [AURA_TYPES.SAKURA]: 'Sakura'
+      };
+
+      const newConfig = {
+        name: `${presetNames[activeAura]} + Physics`,
+        description: `${presetNames[activeAura]} with ${physicsSelection.join(', ')} motion`,
+        glowColor: presetColors[activeAura] || '#a855f7',
+        density: 100,
+        background: "clear",
+        renderMode: "discrete",
+        entities: physicsSelection.map(physics => ({
+          shapes: [
+            { type: "circle", cx: 0, cy: 0, r: 6, fill: presetColors[activeAura] }
+          ],
+          size: [5, 8],
+          speed: [1, 2],
+          lifespan: [1.5, 3],
+          opacity: [0.6, 0.9],
+          style: "glow",
+          movement: physics
+        }))
+      };
+
+      setCustomAuraConfig(newConfig);
+      setActiveAura(AURA_TYPES.CUSTOM);
+      setAiMessage(`Applied ${physicsSelection.join(', ')} to ${presetNames[activeAura]}`);
     }
   };
 
@@ -1395,6 +1562,24 @@ export default function AuraStudio() {
             Overlay
           </button>
 
+          {/* Physics panel toggle */}
+          <button
+            onClick={() => setShowPhysicsPanel(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              showPhysicsPanel
+                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                : 'text-gray-600 border-gray-700 hover:text-gray-400 hover:bg-white/[0.06] hover:border-purple-500/20'
+            }`}
+          >
+            <span className="text-[10px]">⚡</span>
+            Physics
+            {selectedPhysics.length > 0 && (
+              <span className="px-1 py-0.5 rounded-full bg-purple-500/30 text-[9px] min-w-[16px] text-center">
+                {selectedPhysics.length}
+              </span>
+            )}
+          </button>
+
           {/* Dev prompt editor toggle */}
           <button
             onClick={() => setShowDevPanel(v => !v)}
@@ -1419,10 +1604,137 @@ export default function AuraStudio() {
         </div>
       </header>
 
-      {/* Body: main stage + right dev panel */}
+      {/* Body: main stage + side panels */}
       <main className="flex-1 flex relative z-10 min-h-0 overflow-hidden">
 
-        {/* Left: canvas + controls */}
+        {/* Left: Physics panel */}
+        <div
+          className={`flex-shrink-0 border-r border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${
+            showPhysicsPanel ? 'w-72' : 'w-0 overflow-hidden border-r-0'
+          }`}
+        >
+          {showPhysicsPanel && (
+            <>
+              {/* Header */}
+              <div className="px-3 py-2.5 border-b border-purple-500/10 bg-purple-500/[0.03] flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-purple-300 flex items-center gap-2">
+                    <span className="text-sm">⚡</span>
+                    Physics Testing
+                  </span>
+                  {selectedPhysics.length > 0 && (
+                    <button
+                      onClick={() => setSelectedPhysics([])}
+                      className="text-[10px] text-gray-600 hover:text-purple-400 transition-colors px-2 py-1 rounded hover:bg-purple-500/10"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="px-3 py-2 border-b border-white/[0.04] bg-black/20">
+                <span className="text-[9px] text-gray-500">
+                  Select physics types to apply to your aura. Multi-select enabled.
+                </span>
+              </div>
+
+              {/* Physics categories */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                {/* Upward Motion Physics */}
+                <div>
+                  <div className="text-[10px] text-green-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
+                    ↑ Upward Motion
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['levitate', 'fountain', 'tornado', 'drift', 'flutter'].map(physics => (
+                      <button
+                        key={physics}
+                        onClick={() => togglePhysics(physics)}
+                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
+                          selectedPhysics.includes(physics)
+                            ? 'bg-green-500/25 text-green-300 border border-green-500/50 shadow-sm shadow-green-500/20'
+                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-green-500/30 hover:bg-green-500/10'
+                        }`}
+                      >
+                        {physics}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Original Physics */}
+                <div>
+                  <div className="text-[10px] text-blue-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
+                    ⚡ Original
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['float', 'zigzag', 'orbit', 'rise', 'wander', 'spiral'].map(physics => (
+                      <button
+                        key={physics}
+                        onClick={() => togglePhysics(physics)}
+                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
+                          selectedPhysics.includes(physics)
+                            ? 'bg-blue-500/25 text-blue-300 border border-blue-500/50 shadow-sm shadow-blue-500/20'
+                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-blue-500/30 hover:bg-blue-500/10'
+                        }`}
+                      >
+                        {physics}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dynamic Physics */}
+                <div>
+                  <div className="text-[10px] text-purple-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
+                    🌀 Dynamic
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['rain', 'explode', 'swarm', 'bounce', 'pulse', 'vortex'].map(physics => (
+                      <button
+                        key={physics}
+                        onClick={() => togglePhysics(physics)}
+                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
+                          selectedPhysics.includes(physics)
+                            ? 'bg-purple-500/25 text-purple-300 border border-purple-500/50 shadow-sm shadow-purple-500/20'
+                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-purple-500/30 hover:bg-purple-500/10'
+                        }`}
+                      >
+                        {physics}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* New Physics */}
+                <div>
+                  <div className="text-[10px] text-amber-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
+                    ✨ New Physics
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['wave', 'whirlpool', 'magnetic', 'gravity', 'hover'].map(physics => (
+                      <button
+                        key={physics}
+                        onClick={() => togglePhysics(physics)}
+                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
+                          selectedPhysics.includes(physics)
+                            ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20'
+                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-amber-500/30 hover:bg-amber-500/10'
+                        }`}
+                      >
+                        {physics}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Center: canvas + controls */}
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4 min-h-0 min-w-0">
 
           {/* Canvas + Avatar container */}
