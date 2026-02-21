@@ -976,25 +976,14 @@ class Particle {
 // SYSTEM PROMPT - LAYER 1: GLOW CONFIGURATION
 // Controls: glowColor, background, renderMode, density
 // ============================================================================
-const PROMPT_LAYER_GLOW = `=== GLOW LAYER SPEC ===
+const PROMPT_LAYER_GLOW = `You are a JSON-only generator for the GLOW layer of a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no extra text, no commentary.
 
-glowColor: Primary hex color for the overall aura theme. This color is used for:
-- Avatar drop-shadow glow effect
-- Ambient background radial gradient
-- Should match the dominant theme color
+Goal:
+Generate a stylized anime aura glow setup that supports a grounded (feet-up) upward aura, with a clear intentional void in the center for compositing a character later. The result must not look like a blurry background blob. It must feel like an aura silhouette + controlled glow, not background VFX.
 
-background: Canvas clearing behavior between frames
-- "clear": Full transparency, no trails (clean look, good for discrete particles)
-- "dark-fade": Soft dark overlay (rgba 10,10,15,0.2) — creates motion trails, good for fire/energy
-- "black-fade": Stronger dark overlay (rgba 0,0,0,0.3) — more prominent trails, good for cosmic/magic
+Non-negotiable constraints:
 
-renderMode: Particle rendering approach
-- "discrete": Solid distinct particles (characters, sparks, objects)
-- "fluid": Smoke/fog mode — engine auto-expands particles as radial-gradient blobs for seamless blending
-
-density: Number of particles (50-200 for discrete, 60-80 for fluid)
-
-Glow Schema:
+Always output exactly this JSON schema and nothing else:
 {
   "glowColor": "#hex",
   "background": "clear" | "dark-fade" | "black-fade",
@@ -1002,11 +991,36 @@ Glow Schema:
   "density": number
 }
 
-Glow Examples:
-- Fire/energy: glowColor="#ff5500", background="dark-fade", renderMode="discrete", density=180
-- Mystic fog: glowColor="#9ca3af", background="clear", renderMode="fluid", density=70
-- Cosmic: glowColor="#6366f1", background="black-fade", renderMode="discrete", density=100
-- Cute characters: glowColor="#f9a8d4", background="clear", renderMode="discrete", density=50`;
+Default renderMode must be "discrete". Only use "fluid" when the prompt explicitly requests fog/mist/smoke/cloud.
+
+Density must be low-to-medium to avoid clutter:
+- discrete: 55 to 95
+- fluid: 60 to 80
+
+background:
+- Use "dark-fade" for energy/fire/electric/wind (subtle trails)
+- Use "black-fade" only for cosmic/space/magic (stronger trails)
+- Use "clear" for cute/clean/minimal or when prompt says "no trails / clean"
+
+glowColor must be theme-accurate and saturated (no gray/white as primary).
+
+This layer is not allowed to create the silhouette itself. It only supports it. Avoid overpowering glows.
+
+Theme mapping rules (not just color swaps; pick correct family):
+- super saiyan / power-up / golden / aura: #FFD700 or #FFC400
+- fire / flame / inferno: #FF4D1A or #FF5A00
+- electric / lightning / shock: #FFE600 or #6EE7FF (choose yellow as primary if unspecified)
+- wind / air / storm / gust: #64D2FF or #22D3EE
+- cosmic / space / galaxy: #7C3AED or #4F46E5
+- ice / frost: #60A5FA or #38BDF8
+- sakura / petals: #FB7185 or #F472B6
+- dark / shadow: #6D28D9 or #111827 (prefer purple-black, still saturated)
+
+Safety / moderation:
+If the user prompt includes NSFW sexual content, drugs, weapons, gore, self-harm, or hate terms: output a safe neutral glow:
+{"glowColor":"#60A5FA","background":"clear","renderMode":"discrete","density":60}
+
+Output only the JSON object.`;
 
 // ============================================================================
 // SYSTEM PROMPT - LAYER 2: PARTICLE CONFIGURATION
@@ -1079,43 +1093,12 @@ Lightning bolt entity:
 // ============================================================================
 const PROMPT_LAYER_OUTERSHAPE = `=== OUTER SHAPE LAYER SPEC ===
 
-outerShape: An animated glowing HOLLOW ring/shell rendered ON TOP of particles, wrapping outside the avatar. Center is fully transparent — only the outer edge band is visible as a radiating energy silhouette. The shape is defined by a "radii" array.
+You are a JSON-only generator for the OUTER SHAPE layer of a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no extra text, no commentary.
 
-Properties:
-- color: Primary hex color (should match glowColor theme)
-- secondaryColor: Secondary hex for gradient layers
-- intensity: 0.3-1.0 (glow brightness)
-- speed: 0.3-3.0 (animation speed)
-- scale: 0.8-1.3 (overall size multiplier)
-- pulseAmount: 0.02-0.12 (breathing/pulse strength)
-- hollowRatio: 0.45-0.75 (0.5 = thick ring, 0.7 = thin ring)
-- layers: 1-4 (number of concentric glow layers)
-- radii: Array of exactly 12 numbers (radius multipliers at 30° intervals)
-- noiseAmount: 0.01-0.08 (organic edge distortion)
-- noiseSpeed: 0.3-2.0 (edge noise animation speed)
-- scaleX: 0.8-0.95 (horizontal squeeze; 0.85 = egg-shaped, 0.95 = round)
+Primary goal:
+Generate a DBZ-style anime aura silhouette: grounded at feet, sharp flame spikes rising upward, with visible crown peaks at the top, side flicks, and a tight base. It must NOT look like a smooth oval blob. It must look like a flame aura outline. Preserve a clear hollow center for compositing a character.
 
-Radii Array Design (index → angle):
-- 0: right (0°)
-- 1-2: lower-right (30°-60°)
-- 3: bottom (90°)
-- 4-5: lower-left (120°-150°)
-- 6: left (180°)
-- 7-8: upper-left (210°-240°)
-- 9: top (270°)
-- 10-11: upper-right (300°-330°)
-
-Values range 0.85-1.5. Higher value = shape extends outward at that angle.
-
-Radii Design Patterns:
-- Fire/flame: indices 7-11 high (1.15-1.4), indices 2-4 low (0.9-0.95) → upward flame
-- Calm/holy/cosmic: all ~1.0 → smooth circle
-- Electric/chaotic: alternating high/low (0.95-1.15) → jagged irregular
-- Wind/swirl: gentle wave pattern (alternate 0.95-1.1)
-- Dark/infernal: indices 2-4 high (1.1-1.2), top low → dripping downward
-- Shield/defensive: indices 0,6 slightly high (1.05-1.1), 3,9 high (1.1-1.15) → rounded rectangle
-
-OuterShape Schema:
+Output must be exactly this schema and nothing else:
 {
   "color": "#hex",
   "secondaryColor": "#hex",
@@ -1131,16 +1114,57 @@ OuterShape Schema:
   "scaleX": number
 }
 
-OuterShape Examples:
+Hard constraints (do not violate):
+- radii: exactly 12 numbers, each 0.85 to 1.50
+- layers: 4 (always 4 for richer silhouette)
+- scaleX: 0.82 to 0.86 (must be squeezed so it is not round)
+- hollowRatio: 0.56 to 0.62 (thicker band so flame silhouette reads)
+- noiseAmount: 0.06 to 0.08 (high enough to avoid blob feel)
+- noiseSpeed: 1.2 to 1.8 (animated edge, feels alive)
+- intensity: 0.85 to 0.95 for energy themes; 0.70 to 0.85 for softer themes
+- speed: 1.0 to 1.6 (looping motion, not chaotic)
+- pulseAmount: 0.06 to 0.10
 
-Fire aura:
-{"color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.98,0.95,0.92,0.95,0.98,1.0,1.05,1.2,1.35,1.2,1.05],"noiseAmount":0.04,"noiseSpeed":0.8,"scaleX":0.85}
+DBZ silhouette rules (must affect radii, not just color):
+Top crown must be the most extended region:
+- index 9 (top) must be 1.40 to 1.50
+- index 10 and 11 (upper-right) must be 1.25 to 1.40
+- index 7 and 8 (upper-left) must be 1.25 to 1.40
+Sides must have flicks but not become circular:
+- index 0 (right) must be 1.05 to 1.15
+- index 6 (left) must be 1.05 to 1.15
+Base must be grounded and tight:
+- index 3 (bottom) must be 0.85 to 0.90
+- index 2 and 4 (lower-right/lower-left) must be 0.88 to 0.95
+- index 1 and 5 must be 0.92 to 1.00
 
-Calm/subtle:
-{"color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.6,"layers":2,"radii":[1.0,1.02,1.0,0.98,1.0,1.03,1.0,0.98,1.02,1.06,1.02,0.99],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.88}
+Radii must be asymmetric by small amount (0.02 to 0.06) so it feels organic, but still balanced (no lopsided aura).
 
-Super saiyan:
-{"color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.97,0.93,0.9,0.93,0.97,1.0,1.08,1.25,1.4,1.25,1.08],"noiseAmount":0.04,"noiseSpeed":0.9,"scaleX":0.84}`;
+Theme mapping (shape stays DBZ-flame framework; only tweak jaggedness slightly):
+- super saiyan / power / energy / fire: use full DBZ crown peaks (highest top)
+- electric / shock / lightning: keep crown peaks, but make alternating micro-jaggedness (small alternation in 7-11 by ±0.03)
+- wind / cosmic / sakura: still flame silhouette, but slightly lower crown peaks (reduce indices 7-11 by 0.05 to 0.10), keep noiseAmount closer to 0.06
+
+Color rules:
+color and secondaryColor must match theme. Do not force the prompt's UI-selected color; infer from the user prompt.
+Examples:
+- super saiyan: color "#FFD700", secondaryColor "#FFA500"
+- fire: color "#FF5A00", secondaryColor "#FFB020"
+- electric: color "#FFE600", secondaryColor "#64D2FF"
+- wind: color "#22D3EE", secondaryColor "#A5F3FC"
+- cosmic: color "#7C3AED", secondaryColor "#4F46E5"
+- sakura: color "#FB7185", secondaryColor "#F472B6"
+- poison/green: color "#22C55E", secondaryColor "#A3E635"
+
+Default radii template (DBZ flame silhouette baseline) to adapt:
+Start from this and apply small theme adjustments (±0.02 to ±0.06) while respecting all constraints:
+[1.10,0.96,0.92,0.88,0.92,0.96,1.10,1.28,1.36,1.48,1.36,1.28]
+
+Safety / moderation:
+If the user prompt includes NSFW sexual content, drugs, weapons, gore, self-harm, or hate terms, output a safe calm aura (still non-blob, but softer):
+{"color":"#60A5FA","secondaryColor":"#38BDF8","intensity":0.75,"speed":1.0,"scale":1.12,"pulseAmount":0.06,"hollowRatio":0.60,"layers":4,"radii":[1.08,0.98,0.94,0.89,0.94,0.98,1.08,1.22,1.30,1.40,1.30,1.22],"noiseAmount":0.06,"noiseSpeed":1.2,"scaleX":0.84}
+
+Return only the JSON object.`;
 
 // ============================================================================
 // COMBINED EXAMPLES (full JSON for LLM context)
