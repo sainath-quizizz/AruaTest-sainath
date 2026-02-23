@@ -108,6 +108,176 @@ const OUTER_SHAPE_PRESETS = {
   },
 };
 
+const SHAPE_PRESETS = {
+  flame: {
+    name: 'Flame',
+    icon: '🔥',
+    config: {
+      color: '#FFD700',
+      secondaryColor: '#FF8C00',
+      intensity: 0.92,
+      speed: 1.4,
+      scale: 1.15,
+      pulseAmount: 0.07,
+      hollowRatio: 0.48,
+      layers: 4,
+      radii: [1.05, 0.98, 0.93, 0.88, 0.93, 0.98, 1.05, 1.1, 1.15, 1.18, 1.15, 1.1],
+      spikes: [
+        // Top crown — tallest spikes
+        { angle: 270, height: 0.85, width: 16, sharpness: 0.8 },
+        { angle: 258, height: 0.7, width: 13, sharpness: 0.75 },
+        { angle: 282, height: 0.72, width: 13, sharpness: 0.75 },
+        { angle: 246, height: 0.6, width: 12, sharpness: 0.72 },
+        { angle: 294, height: 0.62, width: 12, sharpness: 0.72 },
+        // Upper sides
+        { angle: 234, height: 0.5, width: 11, sharpness: 0.7 },
+        { angle: 306, height: 0.52, width: 11, sharpness: 0.7 },
+        { angle: 222, height: 0.42, width: 10, sharpness: 0.65 },
+        { angle: 318, height: 0.44, width: 10, sharpness: 0.65 },
+        { angle: 210, height: 0.36, width: 10, sharpness: 0.6 },
+        { angle: 330, height: 0.38, width: 10, sharpness: 0.6 },
+        // Mid sides
+        { angle: 198, height: 0.3, width: 10, sharpness: 0.55 },
+        { angle: 342, height: 0.32, width: 10, sharpness: 0.55 },
+        { angle: 186, height: 0.25, width: 9, sharpness: 0.5 },
+        { angle: 354, height: 0.27, width: 9, sharpness: 0.5 },
+        // Lower sides
+        { angle: 170, height: 0.2, width: 9, sharpness: 0.45 },
+        { angle: 10, height: 0.22, width: 9, sharpness: 0.45 },
+        { angle: 155, height: 0.16, width: 8, sharpness: 0.4 },
+        { angle: 25, height: 0.18, width: 8, sharpness: 0.4 },
+        // Bottom — smaller spikes
+        { angle: 135, height: 0.12, width: 8, sharpness: 0.35 },
+        { angle: 45, height: 0.14, width: 8, sharpness: 0.35 },
+        { angle: 115, height: 0.1, width: 8, sharpness: 0.3 },
+        { angle: 65, height: 0.1, width: 8, sharpness: 0.3 },
+        { angle: 90, height: 0.08, width: 10, sharpness: 0.25 },
+      ],
+      noiseAmount: 0.05,
+      noiseSpeed: 1.2,
+      scaleX: 0.85,
+    },
+  },
+  shadow: {
+    name: 'Shadow',
+    icon: '👤',
+    config: {
+      color: '#6366F1',
+      secondaryColor: '#3B82F6',
+      intensity: 0.88,
+      speed: 0.9,
+      scale: 1.25,
+      pulseAmount: 0.06,
+      hollowRatio: 0.48,
+      layers: 4,
+      radii: [1.1, 1.02, 0.95, 0.9, 0.95, 1.02, 1.1, 1.08, 1.12, 1.14, 1.12, 1.08],
+      spikes: [
+        // Top — wide flowing upward
+        { angle: 270, height: 0.5, width: 28, sharpness: 0.3 },
+        { angle: 254, height: 0.4, width: 22, sharpness: 0.25 },
+        { angle: 286, height: 0.42, width: 22, sharpness: 0.25 },
+        // Upper sides — billowing outward
+        { angle: 236, height: 0.45, width: 24, sharpness: 0.28 },
+        { angle: 304, height: 0.47, width: 24, sharpness: 0.28 },
+        { angle: 220, height: 0.52, width: 28, sharpness: 0.22 },
+        { angle: 320, height: 0.54, width: 28, sharpness: 0.22 },
+        // Mid sides — largest billows (dark smoke spreading from shoulders)
+        { angle: 202, height: 0.58, width: 30, sharpness: 0.18 },
+        { angle: 338, height: 0.58, width: 30, sharpness: 0.18 },
+        { angle: 186, height: 0.5, width: 28, sharpness: 0.18 },
+        { angle: 354, height: 0.5, width: 28, sharpness: 0.18 },
+        // Lower sides — tapering
+        { angle: 168, height: 0.38, width: 22, sharpness: 0.18 },
+        { angle: 12, height: 0.38, width: 22, sharpness: 0.18 },
+        { angle: 150, height: 0.28, width: 18, sharpness: 0.15 },
+        { angle: 30, height: 0.28, width: 18, sharpness: 0.15 },
+        // Bottom — minimal
+        { angle: 130, height: 0.18, width: 16, sharpness: 0.12 },
+        { angle: 50, height: 0.18, width: 16, sharpness: 0.12 },
+        { angle: 110, height: 0.12, width: 14, sharpness: 0.1 },
+        { angle: 70, height: 0.12, width: 14, sharpness: 0.1 },
+        { angle: 90, height: 0.08, width: 18, sharpness: 0.1 },
+      ],
+      noiseAmount: 0.06,
+      noiseSpeed: 0.8,
+      scaleX: 0.88,
+    },
+  },
+  blaze: {
+    name: 'Blaze',
+    icon: '🔷',
+    config: {
+      color: '#60A5FA',
+      secondaryColor: '#38BDF8',
+      intensity: 0.92,
+      speed: 1.3,
+      scale: 1.2,
+      pulseAmount: 0.07,
+      hollowRatio: 0.5,
+      layers: 4,
+      // Outer: flame spikes at top and sides, minimal at bottom
+      radii: [1.04, 0.96, 0.90, 0.86, 0.90, 0.96, 1.04, 1.1, 1.14, 1.16, 1.14, 1.1],
+      spikes: [
+        // Top crown — tall sharp spikes
+        { angle: 270, height: 0.82, width: 16, sharpness: 0.78 },
+        { angle: 257, height: 0.65, width: 13, sharpness: 0.72 },
+        { angle: 283, height: 0.67, width: 13, sharpness: 0.72 },
+        { angle: 244, height: 0.52, width: 12, sharpness: 0.68 },
+        { angle: 296, height: 0.54, width: 12, sharpness: 0.68 },
+        // Upper sides — medium spikes
+        { angle: 232, height: 0.42, width: 11, sharpness: 0.62 },
+        { angle: 308, height: 0.44, width: 11, sharpness: 0.62 },
+        { angle: 220, height: 0.34, width: 10, sharpness: 0.58 },
+        { angle: 320, height: 0.36, width: 10, sharpness: 0.58 },
+        // Mid sides — smaller spikes curving down
+        { angle: 208, height: 0.26, width: 10, sharpness: 0.52 },
+        { angle: 332, height: 0.28, width: 10, sharpness: 0.52 },
+        { angle: 195, height: 0.2, width: 9, sharpness: 0.45 },
+        { angle: 345, height: 0.22, width: 9, sharpness: 0.45 },
+        // Lower sides — tapered tips
+        { angle: 180, height: 0.14, width: 9, sharpness: 0.4 },
+        { angle: 0, height: 0.16, width: 9, sharpness: 0.4 },
+        { angle: 165, height: 0.1, width: 8, sharpness: 0.35 },
+        { angle: 15, height: 0.12, width: 8, sharpness: 0.35 },
+      ],
+      // Inner hollow: wider at bottom (open), narrow at top (thick flame band)
+      // Index: 0=right, 3=bottom, 6=left, 9=top
+      innerRadii: [1.0, 1.15, 1.35, 1.55, 1.35, 1.15, 1.0, 0.85, 0.75, 0.65, 0.75, 0.85],
+      noiseAmount: 0.05,
+      noiseSpeed: 1.1,
+      scaleX: 0.85,
+    },
+  },
+  burst: {
+    name: 'Burst',
+    icon: '💥',
+    config: {
+      color: '#EF4444',
+      secondaryColor: '#F97316',
+      intensity: 0.85,
+      speed: 1.6,
+      scale: 1.2,
+      pulseAmount: 0.08,
+      hollowRatio: 0.5,
+      layers: 3,
+      radii: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      spikes: [
+        { angle: 0, height: 0.5, width: 18, sharpness: 0.65 },
+        { angle: 45, height: 0.35, width: 14, sharpness: 0.6 },
+        { angle: 90, height: 0.4, width: 16, sharpness: 0.6 },
+        { angle: 135, height: 0.35, width: 14, sharpness: 0.6 },
+        { angle: 180, height: 0.5, width: 18, sharpness: 0.65 },
+        { angle: 225, height: 0.35, width: 14, sharpness: 0.6 },
+        { angle: 270, height: 0.55, width: 20, sharpness: 0.7 },
+        { angle: 315, height: 0.35, width: 14, sharpness: 0.6 },
+      ],
+      noiseAmount: 0.06,
+      noiseSpeed: 1.5,
+      scaleX: 0.9,
+    },
+  },
+};
+
 class OuterShapeRenderer {
   constructor(canvasWidth, canvasHeight) {
     this.w = canvasWidth;
@@ -163,6 +333,36 @@ class OuterShapeRenderer {
     );
   }
 
+  _getSpikeContribution(angle, spikes, time, layer) {
+    if (!spikes || spikes.length === 0) return 0;
+    let maxContrib = 0;
+    for (const spike of spikes) {
+      const spikeAngle = (spike.angle || 0) * Math.PI / 180;
+      const halfWidth = ((spike.width || 15) * Math.PI / 180) / 2;
+      const height = spike.height || 0.5;
+      const sharpness = spike.sharpness ?? 0.5;
+
+      // Angle difference wrapped to -PI..PI
+      let diff = angle - spikeAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      if (Math.abs(diff) < halfWidth) {
+        const t = 1 - Math.abs(diff) / halfWidth; // 0 at edge, 1 at center
+        // Smooth: cosine bell curve
+        const smooth = (Math.cos((1 - t) * Math.PI) + 1) / 2;
+        // Sharp: power curve for pointy tips
+        const sharp = Math.pow(t, 0.4 + sharpness * 2);
+        // Blend based on sharpness
+        const envelope = smooth * (1 - sharpness) + sharp * sharpness;
+        // Animate with subtle pulse per spike
+        const pulse = 1 + Math.sin(time * 2 + spike.angle * 0.05 + layer) * 0.04;
+        maxContrib = Math.max(maxContrib, height * envelope * pulse);
+      }
+    }
+    return maxContrib;
+  }
+
   draw(ctx) {
     if (!this.config) return;
 
@@ -172,10 +372,16 @@ class OuterShapeRenderer {
     const { color, secondaryColor, intensity, pulseAmount, layers } = this.config;
     const hollow = this.config.hollowRatio || 0.55;
     const radii = this.config.radii || [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+    const spikes = this.config.spikes || [];
+    const innerRadii = this.config.innerRadii || null;
+    const innerSpikes = this.config.innerSpikes || [];
     const noiseAmt = this.config.noiseAmount || 0.04;
     const noiseSpd = this.config.noiseSpeed || 0.8;
     const scaleX = this.config.scaleX || 0.85;
     const t = this.time;
+
+    // Precompute max spike height for gradient sizing
+    const spikeMaxH = spikes.length > 0 ? Math.max(...spikes.map(s => s.height || 0)) : 0;
 
     const rgb = this._hexToRgb(color);
     const rgb2 = this._hexToRgb(secondaryColor || color);
@@ -193,11 +399,14 @@ class OuterShapeRenderer {
       const mixG = Math.round(rgb.g * layerRatio + rgb2.g * (1 - layerRatio));
       const mixB = Math.round(rgb.b * layerRatio + rgb2.b * (1 - layerRatio));
 
+      // Draw outer path (clockwise)
       ctx.beginPath();
       const segments = 120;
       for (let i = 0; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        const radiusMul = this._getRadiusAt(angle, radii);
+        const baseRadiusMul = this._getRadiusAt(angle, radii);
+        const spikeContrib = this._getSpikeContribution(angle, spikes, t, layer);
+        const radiusMul = baseRadiusMul + spikeContrib;
         const extension = Math.max(0, radiusMul - 1.0) / 0.35;
         const localNoise = noiseAmt * (1 + extension * 2.5);
         const n = this._noise(angle, t * noiseSpd + layer * 0.5, 2, localNoise * r);
@@ -209,25 +418,67 @@ class OuterShapeRenderer {
       }
       ctx.closePath();
 
-      const gradR = r * 1.25;
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR);
-      const h = hollow;
+      if (innerRadii) {
+        // === NON-CIRCULAR HOLLOW: draw inner path as sub-path, use evenodd ===
+        const innerScale = hollow;
+        for (let i = 0; i <= segments; i++) {
+          const angle = (i / segments) * Math.PI * 2;
+          const innerBaseR = this._getRadiusAt(angle, innerRadii);
+          const innerSpikeC = this._getSpikeContribution(angle, innerSpikes, t, layer);
+          const innerMul = innerBaseR + innerSpikeC;
+          const innerNoise = this._noise(angle, t * noiseSpd * 0.5 + layer * 0.3, 2, noiseAmt * 0.3 * r);
+          const innerR = r * innerScale * innerMul + innerNoise;
+          const x = cx + Math.cos(angle) * innerR * scaleX;
+          const y = cy + Math.sin(angle) * innerR;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
 
-      grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},0)`);
-      grad.addColorStop(h * 0.6, `rgba(${mixR},${mixG},${mixB},0)`);
-      grad.addColorStop(h * 0.82, `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`);
-      grad.addColorStop(h, `rgba(${mixR},${mixG},${mixB},${alpha * 0.5})`);
-      grad.addColorStop(Math.min(h + 0.12, 0.88), `rgba(${mixR},${mixG},${mixB},${alpha})`);
-      grad.addColorStop(0.95, `rgba(${mixR},${mixG},${mixB},${alpha * 0.25})`);
-      grad.addColorStop(1, `rgba(${mixR},${mixG},${mixB},0)`);
+        // Gradient: bright at inner edge, fading outward through spikes
+        const gradR = r * (1.25 + spikeMaxH * 0.9);
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR);
+        const relInner = (innerScale * r) / gradR;
 
-      ctx.globalCompositeOperation = 'screen';
-      ctx.fillStyle = grad;
-      ctx.fill();
+        grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},${alpha * 0.9})`);
+        grad.addColorStop(Math.max(relInner - 0.05, 0.01), `rgba(${mixR},${mixG},${mixB},${alpha})`);
+        grad.addColorStop(relInner, `rgba(${mixR},${mixG},${mixB},${alpha})`);
+        grad.addColorStop(Math.min(relInner + 0.12, 0.65), `rgba(${mixR},${mixG},${mixB},${alpha * 0.7})`);
+        grad.addColorStop(Math.min(relInner + 0.3, 0.8), `rgba(${mixR},${mixG},${mixB},${alpha * 0.3})`);
+        grad.addColorStop(0.92, `rgba(${mixR},${mixG},${mixB},${alpha * 0.08})`);
+        grad.addColorStop(1, `rgba(${mixR},${mixG},${mixB},0)`);
 
-      ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+        ctx.globalCompositeOperation = 'screen';
+        ctx.fillStyle = grad;
+        ctx.fill('evenodd');
+
+        ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.1})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        // === CIRCULAR HOLLOW via gradient (original behavior) ===
+        const gradR = r * (1.25 + spikeMaxH * 0.9);
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR);
+        const h = hollow;
+        const sf = (r * 1.25) / gradR;
+
+        grad.addColorStop(0, `rgba(${mixR},${mixG},${mixB},0)`);
+        grad.addColorStop(h * 0.6 * sf, `rgba(${mixR},${mixG},${mixB},0)`);
+        grad.addColorStop(h * 0.82 * sf, `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`);
+        grad.addColorStop(h * sf, `rgba(${mixR},${mixG},${mixB},${alpha * 0.5})`);
+        grad.addColorStop(Math.min(h * sf + 0.1, 0.55), `rgba(${mixR},${mixG},${mixB},${alpha})`);
+        grad.addColorStop(Math.min(0.65, 0.55 + sf * 0.15), `rgba(${mixR},${mixG},${mixB},${alpha * 0.6})`);
+        grad.addColorStop(0.85, `rgba(${mixR},${mixG},${mixB},${alpha * 0.2})`);
+        grad.addColorStop(0.95, `rgba(${mixR},${mixG},${mixB},${alpha * 0.08})`);
+        grad.addColorStop(1, `rgba(${mixR},${mixG},${mixB},0)`);
+
+        ctx.globalCompositeOperation = 'screen';
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        ctx.strokeStyle = `rgba(${mixR},${mixG},${mixB},${alpha * 0.15})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
 
     ctx.restore();
@@ -310,16 +561,25 @@ class Particle {
         this.vy = random(vyRange[0], vyRange[1]);
 
         const mov = this.entity.movement;
-        if (typeof mov === 'string') {
-          const downwardTypes = ['rain', 'bounce'];
-          if (!downwardTypes.includes(mov) && this.vy > 0) {
+        const movType = typeof mov === 'string' ? mov : null;
+        if (movType) {
+          const downwardTypes = ['rain', 'bounce', 'gravity'];
+          if (!downwardTypes.includes(movType) && this.vy > 0) {
             this.vy = -Math.abs(this.vy);
           }
         }
 
+        // Rain: spawn at top of canvas, fall downward across full width
+        if (movType === 'rain') {
+          this.x = random(0, this.w);
+          this.y = random(-40, -5);
+          this.vy = Math.abs(this.vy) || random(2, 5);
+          this.rotation = random(-0.1, 0.1);
+          this.rotSpeed = random(-0.005, 0.005);
+          this.life = 1;
+          this.decay = random(0.003, 0.008);
         // Fluid mode: spawn from bottom NARROW, slower decay for smooth blending
-        const isFluidMode = this.customConfig.renderMode === 'fluid';
-        if (isFluidMode) {
+        } else if (this.customConfig.renderMode === 'fluid') {
           // Start NARROW at the bottom (like real smoke from a source)
           this.x = centerX + random(-30, 30); // Much narrower spawn area
           this.y = feetY + random(30, 50); // Spawn at bottom
@@ -545,8 +805,11 @@ class Particle {
             break;
           }
           case 'rain':
-            this.x += Math.sin(this.movementPhase * 0.5) * 1.2;
-            this.vy += 0.03;
+            this.x += Math.sin(this.movementPhase * 0.5) * 0.5;
+            this.vy += 0.08;
+            if (this.y > this.h + 20) {
+              this.reset();
+            }
             break;
           case 'explode':
             this.vx *= 0.97;
@@ -1093,76 +1356,88 @@ Lightning bolt entity:
 // ============================================================================
 const PROMPT_LAYER_OUTERSHAPE = `=== OUTER SHAPE LAYER SPEC ===
 
-You are a JSON-only generator for the OUTER SHAPE layer of a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no extra text, no commentary.
+You generate the OUTER SHAPE layer for a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no commentary.
 
-Primary goal:
-Generate a DBZ-style anime aura silhouette: grounded at feet, sharp flame spikes rising upward, with visible crown peaks at the top, side flicks, and a tight base. It must NOT look like a smooth oval blob. It must look like a flame aura outline. Preserve a clear hollow center for compositing a character.
+The outer shape is a dynamic silhouette rendered around a character. It consists of:
+1. A smooth BASE SHAPE defined by 12 radii (interpolated ring)
+2. SPIKES overlaid on top — pointed protrusions that give the shape its character (flames, wings, tendrils, etc.)
 
-Output must be exactly this schema and nothing else:
+The shape MUST have a hollow center (for the character). Choose the shape style to MATCH the particle aura theme.
+
+Output schema:
 {
   "color": "#hex",
   "secondaryColor": "#hex",
-  "intensity": number,
-  "speed": number,
-  "scale": number,
-  "pulseAmount": number,
-  "hollowRatio": number,
-  "layers": number,
-  "radii": [12 numbers],
-  "noiseAmount": number,
-  "noiseSpeed": number,
-  "scaleX": number
+  "intensity": 0.6-0.95,
+  "speed": 0.4-1.8,
+  "scale": 1.0-1.3,
+  "pulseAmount": 0.03-0.10,
+  "hollowRatio": 0.45-0.65,
+  "layers": 2-4,
+  "radii": [12 numbers, each 0.8-1.3],
+  "spikes": [array of spike objects],
+  "noiseAmount": 0.02-0.08,
+  "noiseSpeed": 0.3-1.8,
+  "scaleX": 0.82-0.95,
+  "innerRadii": [OPTIONAL, 12 numbers, each 0.5-1.6],
+  "innerSpikes": [OPTIONAL, array of spike objects]
 }
 
-Hard constraints (do not violate):
-- radii: exactly 12 numbers, each 0.85 to 1.50
-- layers: 4 (always 4 for richer silhouette)
-- scaleX: 0.82 to 0.86 (must be squeezed so it is not round)
-- hollowRatio: 0.56 to 0.62 (thicker band so flame silhouette reads)
-- noiseAmount: 0.06 to 0.08 (high enough to avoid blob feel)
-- noiseSpeed: 1.2 to 1.8 (animated edge, feels alive)
-- intensity: 0.85 to 0.95 for energy themes; 0.70 to 0.85 for softer themes
-- speed: 1.0 to 1.6 (looping motion, not chaotic)
-- pulseAmount: 0.06 to 0.10
+Spike object: {"angle": degrees, "height": 0.1-1.0, "width": 8-40, "sharpness": 0.0-1.0}
 
-DBZ silhouette rules (must affect radii, not just color):
-Top crown must be the most extended region:
-- index 9 (top) must be 1.40 to 1.50
-- index 10 and 11 (upper-right) must be 1.25 to 1.40
-- index 7 and 8 (upper-left) must be 1.25 to 1.40
-Sides must have flicks but not become circular:
-- index 0 (right) must be 1.05 to 1.15
-- index 6 (left) must be 1.05 to 1.15
-Base must be grounded and tight:
-- index 3 (bottom) must be 0.85 to 0.90
-- index 2 and 4 (lower-right/lower-left) must be 0.88 to 0.95
-- index 1 and 5 must be 0.92 to 1.00
+Angle reference (canvas coordinates):
+- 0° = right, 90° = bottom, 180° = left, 270° = top
+- Upward spikes use angles ~220°-320°
+- Side extensions use angles ~150°-210° (left) and ~330°-30° (right)
+- Downward use angles ~60°-120°
 
-Radii must be asymmetric by small amount (0.02 to 0.06) so it feels organic, but still balanced (no lopsided aura).
+Spike parameters:
+- height: how far the spike extends beyond base (0.1=subtle bump, 0.8+=dramatic spike)
+- width: angular spread in degrees (8=narrow/pointed, 40=wide/spread)
+- sharpness: interpolation style (0=smooth/rounded, 1=pointed/sharp)
 
-Theme mapping (shape stays DBZ-flame framework; only tweak jaggedness slightly):
-- super saiyan / power / energy / fire: use full DBZ crown peaks (highest top)
-- electric / shock / lightning: keep crown peaks, but make alternating micro-jaggedness (small alternation in 7-11 by ±0.03)
-- wind / cosmic / sakura: still flame silhouette, but slightly lower crown peaks (reduce indices 7-11 by 0.05 to 0.10), keep noiseAmount closer to 0.06
+Shape design rules by theme:
+- Fire / energy / power / super saiyan: flame spikes pointing upward (5-8 spikes around 220°-320°), tight bottom radii (0.85-0.92), scaleX 0.83-0.87, sharpness 0.5-0.8
+- Electric / lightning: irregular spikes all around (6-10 spikes), varying heights and angles, sharpness 0.6-0.9
+- Wind / nature / calm: gentle flowing extensions, fewer spikes (3-5), sharpness 0.1-0.4, wider widths
+- Shield / barrier / protection: mostly uniform base, wide low bumps (width 40-60, height 0.08-0.15, sharpness 0.0-0.2), scaleX 0.90-0.95
+- Wings / angel / flight: large side extensions at ~170°-210° and ~330°-10° (4-7 spikes), sharpness 0.3-0.5
+- Dark / shadow / menacing: downward extensions (angles 50°-130°), some upward, sharpness 0.5-0.7
+- Cosmic / space / galaxy: gentle top extensions, few spikes, low sharpness, high scaleX
+- Cute / sakura / soft: minimal spikes (2-4), low height (0.1-0.25), sharpness 0.0-0.3, smooth and round
 
-Color rules:
-color and secondaryColor must match theme. Do not force the prompt's UI-selected color; infer from the user prompt.
-Examples:
-- super saiyan: color "#FFD700", secondaryColor "#FFA500"
-- fire: color "#FF5A00", secondaryColor "#FFB020"
-- electric: color "#FFE600", secondaryColor "#64D2FF"
-- wind: color "#22D3EE", secondaryColor "#A5F3FC"
-- cosmic: color "#7C3AED", secondaryColor "#4F46E5"
-- sakura: color "#FB7185", secondaryColor "#F472B6"
-- poison/green: color "#22C55E", secondaryColor "#A3E635"
+Base radii guide:
+- For flame/energy shapes: tight at bottom [index 3 ~0.85], wider at sides [index 0,6 ~1.05], extended at top [index 9 ~1.15]
+- For shield/uniform shapes: all values ~1.0-1.08
+- For wing shapes: extended at sides [index 0,6 ~1.1], tighter top/bottom
 
-Default radii template (DBZ flame silhouette baseline) to adapt:
-Start from this and apply small theme adjustments (±0.02 to ±0.06) while respecting all constraints:
-[1.10,0.96,0.92,0.88,0.92,0.96,1.10,1.28,1.36,1.48,1.36,1.28]
+NON-CIRCULAR HOLLOW (optional — use innerRadii):
+By default the hollow center is circular. You can optionally provide "innerRadii" (12 numbers) to make the hollow NON-circular. This controls where the hollow boundary is — higher values push the hollow outward (making the visible aura thinner at that angle), lower values pull it inward (making the aura thicker).
 
-Safety / moderation:
-If the user prompt includes NSFW sexual content, drugs, weapons, gore, self-harm, or hate terms, output a safe calm aura (still non-blob, but softer):
-{"color":"#60A5FA","secondaryColor":"#38BDF8","intensity":0.75,"speed":1.0,"scale":1.12,"pulseAmount":0.06,"hollowRatio":0.60,"layers":4,"radii":[1.08,0.98,0.94,0.89,0.94,0.98,1.08,1.22,1.30,1.40,1.30,1.22],"noiseAmount":0.06,"noiseSpeed":1.2,"scaleX":0.84}
+Index reference for innerRadii: [0]=right, [3]=bottom, [6]=left, [9]=top (same as radii).
+
+innerRadii guide:
+- Blue flame / open-bottom shapes: wide at bottom [index 3 ~1.5], narrow at top [index 9 ~0.65] → creates flame that is open at bottom and thick at top
+- Hooded / top-heavy: narrow at bottom [index 3 ~0.7], wide at top [index 9 ~1.3] → thick at bottom, thin at top
+- Side-open / wing shapes: wide at sides [index 0,6 ~1.3], narrow at top/bottom [index 3,9 ~0.7]
+- Omit innerRadii entirely for circular hollow (most common, use this for standard auras)
+
+You can also add "innerSpikes" (same format as spikes) to create pointed protrusions in the hollow boundary. This is rarely needed — only use for very stylized shapes.
+
+IMPORTANT: Only use innerRadii when the theme truly benefits from a non-circular hollow (e.g., open-bottom flames, asymmetric energy). Most auras should use the default circular hollow.
+
+Color rules — match the theme:
+- super saiyan: "#FFD700" / "#FFA500"
+- fire: "#FF5A00" / "#FFB020"
+- electric: "#FFE600" / "#64D2FF"
+- wind: "#22D3EE" / "#A5F3FC"
+- cosmic: "#7C3AED" / "#4F46E5"
+- sakura: "#FB7185" / "#F472B6"
+- ice: "#60A5FA" / "#38BDF8"
+- dark: "#6D28D9" / "#4C1D95"
+
+Safety: If NSFW/harmful content detected, output a safe neutral shape:
+{"color":"#60A5FA","secondaryColor":"#38BDF8","intensity":0.7,"speed":0.8,"scale":1.15,"pulseAmount":0.04,"hollowRatio":0.58,"layers":3,"radii":[1.05,1.02,1.0,0.98,1.0,1.02,1.05,1.03,1.05,1.08,1.05,1.03],"spikes":[{"angle":270,"height":0.12,"width":60,"sharpness":0.1}],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.92}
 
 Return only the JSON object.`;
 
@@ -1172,19 +1447,19 @@ Return only the JSON object.`;
 const PROMPT_EXAMPLES = `=== FULL EXAMPLES ===
 
 User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.06,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.98,0.95,0.92,0.95,0.98,1.0,1.05,1.2,1.35,1.2,1.05],"noiseAmount":0.04,"noiseSpeed":0.8,"scaleX":0.85},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
+{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#ff5500","secondaryColor":"#ff8800","intensity":0.85,"speed":1.3,"scale":1.15,"pulseAmount":0.07,"hollowRatio":0.52,"layers":4,"radii":[1.02,0.95,0.90,0.86,0.90,0.95,1.02,1.08,1.12,1.15,1.12,1.08],"spikes":[{"angle":270,"height":0.7,"width":20,"sharpness":0.7},{"angle":250,"height":0.5,"width":15,"sharpness":0.65},{"angle":290,"height":0.5,"width":15,"sharpness":0.65},{"angle":232,"height":0.35,"width":12,"sharpness":0.6},{"angle":308,"height":0.35,"width":12,"sharpness":0.6},{"angle":215,"height":0.22,"width":10,"sharpness":0.5},{"angle":325,"height":0.22,"width":10,"sharpness":0.5}],"noiseAmount":0.05,"noiseSpeed":1.2,"scaleX":0.85},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
 User: "super saiyan"
-{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"hollowRatio":0.5,"layers":3,"radii":[1.0,0.97,0.93,0.9,0.93,0.97,1.0,1.08,1.25,1.4,1.25,1.08],"noiseAmount":0.04,"noiseSpeed":0.9,"scaleX":0.84},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
+{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#FFD700","secondaryColor":"#FFA500","intensity":0.9,"speed":1.5,"scale":1.2,"pulseAmount":0.08,"hollowRatio":0.5,"layers":4,"radii":[1.03,0.96,0.92,0.87,0.92,0.96,1.03,1.1,1.14,1.18,1.14,1.1],"spikes":[{"angle":270,"height":0.8,"width":22,"sharpness":0.75},{"angle":248,"height":0.6,"width":16,"sharpness":0.7},{"angle":292,"height":0.6,"width":16,"sharpness":0.7},{"angle":228,"height":0.45,"width":14,"sharpness":0.65},{"angle":312,"height":0.45,"width":14,"sharpness":0.65},{"angle":210,"height":0.3,"width":12,"sharpness":0.55},{"angle":330,"height":0.3,"width":12,"sharpness":0.55}],"noiseAmount":0.05,"noiseSpeed":1.3,"scaleX":0.84},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
 
 User: "mystic fog"
-{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.6,"layers":2,"radii":[1.0,1.02,1.0,0.98,1.0,1.03,1.0,0.98,1.02,1.06,1.02,0.99],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.88},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
+{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"color":"#9ca3af","secondaryColor":"#6b7280","intensity":0.45,"speed":0.5,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.6,"layers":2,"radii":[1.02,1.02,1.0,0.98,1.0,1.02,1.02,1.0,1.02,1.04,1.02,1.0],"spikes":[{"angle":260,"height":0.15,"width":40,"sharpness":0.1},{"angle":280,"height":0.12,"width":35,"sharpness":0.1}],"noiseAmount":0.03,"noiseSpeed":0.4,"scaleX":0.9},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
 
 User: "floating cat faces"
-{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"color":"#f9a8d4","secondaryColor":"#f472b6","intensity":0.45,"speed":0.6,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.65,"layers":2,"radii":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"noiseAmount":0.02,"noiseSpeed":0.3,"scaleX":0.88},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
+{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"color":"#f9a8d4","secondaryColor":"#f472b6","intensity":0.45,"speed":0.6,"scale":1.1,"pulseAmount":0.03,"hollowRatio":0.62,"layers":2,"radii":[1.02,1.01,1.0,1.0,1.0,1.01,1.02,1.01,1.02,1.04,1.02,1.01],"spikes":[{"angle":270,"height":0.1,"width":50,"sharpness":0.05}],"noiseAmount":0.02,"noiseSpeed":0.3,"scaleX":0.92},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
 
 User: "pokemon aura"
-{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#EF4444","secondaryColor":"#FBBF24","intensity":0.6,"speed":0.8,"scale":1.1,"pulseAmount":0.05,"hollowRatio":0.6,"layers":2,"radii":[1.05,1.0,0.98,1.02,1.06,1.0,1.04,1.0,1.02,1.08,1.04,1.0],"noiseAmount":0.03,"noiseSpeed":0.5,"scaleX":0.88},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
+{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"color":"#EF4444","secondaryColor":"#FBBF24","intensity":0.6,"speed":0.8,"scale":1.1,"pulseAmount":0.05,"hollowRatio":0.58,"layers":2,"radii":[1.05,1.0,0.98,1.0,1.05,1.0,1.04,1.0,1.02,1.06,1.04,1.0],"spikes":[{"angle":270,"height":0.2,"width":35,"sharpness":0.2},{"angle":0,"height":0.1,"width":25,"sharpness":0.15},{"angle":180,"height":0.1,"width":25,"sharpness":0.15}],"noiseAmount":0.03,"noiseSpeed":0.5,"scaleX":0.9},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
 
 // ============================================================================
 // TASK INSTRUCTIONS (interpretation rules and constraints)
@@ -1209,7 +1484,7 @@ Constraints:
 - Every entity must have at least 3 shapes so it looks like something recognizable.
 - Valid JSON with commas between all array elements.
 - Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.
-- ALWAYS include an "outerShape" object. Design the "radii" array to match the aura theme — fire/energy: extend top (indices 7-11 high), calm/holy: uniform ~1.0, electric: irregular alternating, dark: extend bottom (indices 2-4 high). Colors must match glowColor theme. hollowRatio 0.5-0.55 for intense auras, 0.6-0.7 for subtle ones. scaleX 0.83-0.88 for egg-shaped, 0.9-0.95 for rounder.
+- ALWAYS include an "outerShape" object with a "spikes" array. The outer shape MUST match the aura theme visually. Use spikes to create flame/wing/shield/burst silhouettes. Fire/energy: upward flame spikes (angles 220-320). Electric: irregular spikes all around. Wind/calm: gentle wide bumps. Shield: uniform low bumps. Wings: large side extensions. Always include "spikes" array (can be empty [] for minimal shapes). Colors must match glowColor theme. hollowRatio 0.48-0.55 for intense auras, 0.55-0.65 for subtle ones. scaleX 0.83-0.88 for tall shapes, 0.90-0.95 for rounder. Optionally include "innerRadii" (12 numbers) to create a non-circular hollow — useful for open-bottom flames, asymmetric energy, etc. Omit innerRadii for standard circular hollow.
 
 Output Schema:
 {"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","outerShape":{...},"entities":[...]}`;
@@ -1257,6 +1532,7 @@ export default function AuraStudio() {
   const [densityMultiplier, setDensityMultiplier] = useState(1.0);
   const [speedMultiplier, setSpeedMultiplier] = useState(1.0);
   const [sizeMultiplier, setSizeMultiplier] = useState(1.0);
+  const [activeShapePreset, setActiveShapePreset] = useState(null);
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
@@ -1307,6 +1583,7 @@ export default function AuraStudio() {
       setSelectedPhysics([]);
       setOriginalAuraConfig(null);
       setOriginalAuraType(null);
+      setActiveShapePreset(null);
     } catch (e) {
       console.error("Aura generation error:", e);
       setAiMessage(`Failed: ${e.message}`);
@@ -1343,10 +1620,17 @@ export default function AuraStudio() {
 
       const updatedConfig = {
         ...customAuraConfig,
-        entities: customAuraConfig.entities.map((entity, idx) => ({
-          ...entity,
-          movement: physicsSelection.length === 1 ? physicsSelection[0] : physicsSelection[idx % physicsSelection.length]
-        }))
+        entities: customAuraConfig.entities.map((entity, idx) => {
+          const assignedPhysics = physicsSelection.length === 1 ? physicsSelection[0] : physicsSelection[idx % physicsSelection.length];
+          const isDownward = ['rain', 'gravity'].includes(assignedPhysics);
+          const sp = entity.speed || {};
+          const updatedSpeed = isDownward ? { ...sp, vy: [Math.abs((sp.vy || [-2, -0.5])[0]), Math.abs((sp.vy || [-2, -0.5])[1])] } : sp;
+          return {
+            ...entity,
+            movement: assignedPhysics,
+            speed: updatedSpeed
+          };
+        })
       };
       setCustomAuraConfig(updatedConfig);
       setAiMessage(`Applied physics: ${physicsSelection.join(', ')}`);
@@ -1380,17 +1664,18 @@ export default function AuraStudio() {
         density: 100,
         background: "clear",
         renderMode: "discrete",
-        entities: physicsSelection.map(physics => ({
-          shapes: [
-            { type: "circle", cx: 0, cy: 0, r: 6, fill: presetColors[activeAura] }
-          ],
-          size: [5, 8],
-          speed: [1, 2],
-          lifespan: [1.5, 3],
-          opacity: [0.6, 0.9],
-          style: "glow",
-          movement: physics
-        }))
+        entities: physicsSelection.map(physics => {
+          const isDownward = ['rain', 'gravity'].includes(physics);
+          return {
+            shapes: [
+              { type: "circle", cx: 0, cy: 0, r: 0.35, fill: presetColors[activeAura] }
+            ],
+            size: [18, 26],
+            speed: { vx: [-1, 1], vy: isDownward ? [2, 5] : [-2, -0.5] },
+            style: "glow",
+            movement: physics
+          };
+        })
       };
 
       setCustomAuraConfig(newConfig);
@@ -1447,6 +1732,34 @@ export default function AuraStudio() {
       particlesRef.current.push(particle);
     }
 
+    // Resolve outer shape config with shape preset priority
+    const resolveOuterShapeConfig = () => {
+      if (activeShapePreset && SHAPE_PRESETS[activeShapePreset]) {
+        const presetConfig = { ...SHAPE_PRESETS[activeShapePreset].config };
+        // Inherit colors from active aura if present
+        const auraColor = activeAura === AURA_TYPES.CUSTOM
+          ? customAuraConfig?.glowColor
+          : (activeAura !== AURA_TYPES.NONE ? AURA_COLORS[activeAura] : null);
+        if (auraColor && auraColor !== 'rgba(0,0,0,0)') {
+          presetConfig.color = auraColor;
+          // Derive a lighter secondary color
+          const rgb = new OuterShapeRenderer(0, 0)._hexToRgb(auraColor);
+          const lighten = (v) => Math.min(255, Math.round(v + (255 - v) * 0.3));
+          presetConfig.secondaryColor = `#${lighten(rgb.r).toString(16).padStart(2,'0')}${lighten(rgb.g).toString(16).padStart(2,'0')}${lighten(rgb.b).toString(16).padStart(2,'0')}`;
+        }
+        return presetConfig;
+      }
+      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
+        return customAuraConfig.outerShape;
+      }
+      if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
+        return OUTER_SHAPE_PRESETS[activeAura];
+      }
+      return null;
+    };
+
+    const shapeConfig = resolveOuterShapeConfig();
+
     const outerCanvas = outerCanvasRef.current;
     if (outerCanvas) {
       if (!outerShapeRef.current) {
@@ -1454,14 +1767,7 @@ export default function AuraStudio() {
       }
       outerShapeRef.current.w = outerCanvas.width;
       outerShapeRef.current.h = outerCanvas.height;
-
-      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
-        outerShapeRef.current.setConfig(customAuraConfig.outerShape);
-      } else if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
-        outerShapeRef.current.setConfig(OUTER_SHAPE_PRESETS[activeAura]);
-      } else {
-        outerShapeRef.current.setConfig(null);
-      }
+      outerShapeRef.current.setConfig(shapeConfig);
     }
 
     // Initialize overlay shape renderer (same config as outer shape)
@@ -1472,16 +1778,9 @@ export default function AuraStudio() {
       }
       overlayShapeRef.current.w = overlayCanvas.width;
       overlayShapeRef.current.h = overlayCanvas.height;
-
-      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
-        overlayShapeRef.current.setConfig(customAuraConfig.outerShape);
-      } else if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
-        overlayShapeRef.current.setConfig(OUTER_SHAPE_PRESETS[activeAura]);
-      } else {
-        overlayShapeRef.current.setConfig(null);
-      }
+      overlayShapeRef.current.setConfig(shapeConfig);
     }
-  }, [activeAura, customAuraConfig, densityMultiplier, speedMultiplier, sizeMultiplier]);
+  }, [activeAura, customAuraConfig, densityMultiplier, speedMultiplier, sizeMultiplier, activeShapePreset]);
 
   const animate = useCallback(() => {
     const now = performance.now();
@@ -1803,6 +2102,29 @@ export default function AuraStudio() {
                   </div>
                 </div>
 
+                {/* Outer Shape Presets */}
+                <div>
+                  <div className="text-[10px] text-rose-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
+                    🔷 Outer Shape
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(SHAPE_PRESETS).map(([key, preset]) => (
+                      <button
+                        key={key}
+                        onClick={() => setActiveShapePreset(prev => prev === key ? null : key)}
+                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all flex items-center gap-1 ${
+                          activeShapePreset === key
+                            ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-sm shadow-rose-500/20'
+                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-rose-500/30 hover:bg-rose-500/10'
+                        }`}
+                      >
+                        <span className="text-[10px]">{preset.icon}</span>
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Aura Controls Section */}
                 <div className="pt-4 mt-4 border-t border-white/[0.1]">
                   <div className="flex items-center gap-2 mb-3">
@@ -1984,6 +2306,7 @@ export default function AuraStudio() {
                     setSelectedPhysics([]);
                     setOriginalAuraConfig(null);
                     setOriginalAuraType(null);
+                    setActiveShapePreset(null);
                   }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"
                 >
@@ -2013,6 +2336,7 @@ export default function AuraStudio() {
                       setSelectedPhysics([]);
                       setOriginalAuraConfig(null);
                       setOriginalAuraType(null);
+                      setActiveShapePreset(null);
                     }
                   }}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
