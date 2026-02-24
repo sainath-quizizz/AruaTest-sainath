@@ -46,6 +46,7 @@ const OUTER_SHAPE_PRESETS = {
     thickness: 0.7,
     dualLayer: false,
     intensity: 1.1,
+    contourStyle: 'flame',
   },
   [AURA_TYPES.WIND]: {
     baseColor: '#22D3EE',
@@ -108,6 +109,7 @@ const SHAPE_PRESETS = {
       thickness: 0.7,
       dualLayer: false,
       intensity: 1.1,
+      contourStyle: 'flame',
     },
   },
   shadow: {
@@ -162,6 +164,60 @@ const TAU = Math.PI * 2;
 const MAX_FLAME_POINTS = 48;
 const LUT_SIZE = 360;
 
+function extractSilhouette(imageSrc, canvasW = 600, canvasH = 700) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const cx = canvasW / 2;
+      const cy = canvasH * 0.55;
+      const offscreen = document.createElement('canvas');
+      offscreen.width = canvasW;
+      offscreen.height = canvasH;
+      const ctx = offscreen.getContext('2d');
+
+      const targetH = canvasH * 0.64;
+      const scale = targetH / img.naturalHeight;
+      const drawW = img.naturalWidth * scale;
+      const drawH = targetH;
+      ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+
+      const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
+      const pixels = imageData.data;
+      const radii = new Float32Array(LUT_SIZE);
+      const maxRay = Math.max(canvasW, canvasH);
+
+      for (let deg = 0; deg < LUT_SIZE; deg++) {
+        const angle = (deg / LUT_SIZE) * TAU;
+        const dirX = Math.cos(angle);
+        const dirY = Math.sin(angle);
+        let furthest = 20;
+
+        for (let step = 1; step < maxRay; step++) {
+          const px = Math.round(cx + dirX * step);
+          const py = Math.round(cy + dirY * step);
+          if (px < 0 || px >= canvasW || py < 0 || py >= canvasH) break;
+          const alpha = pixels[(py * canvasW + px) * 4 + 3];
+          if (alpha > 10) furthest = step;
+        }
+        radii[deg] = furthest;
+      }
+
+      const smoothed = new Float32Array(LUT_SIZE);
+      for (let i = 0; i < LUT_SIZE; i++) {
+        const prev = radii[(i - 1 + LUT_SIZE) % LUT_SIZE];
+        const curr = radii[i];
+        const next = radii[(i + 1) % LUT_SIZE];
+        smoothed[i] = prev * 0.2 + curr * 0.6 + next * 0.2;
+      }
+
+      resolve(smoothed);
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageSrc;
+  });
+}
+
 class FlameContourRenderer {
   constructor(canvasWidth, canvasHeight) {
     this.w = canvasWidth;
@@ -186,6 +242,19 @@ class FlameContourRenderer {
       this.flameOffsets.push(Math.random() * 1000);
       this.flameSpeeds.push(0.6 + Math.random() * 0.8);
     }
+
+    this.bolts = [];
+    this.boltTimer = 0;
+    this.boltInterval = 0.08 + Math.random() * 0.12;
+
+    this.streaks = [];
+    this.streakTimer = 0;
+
+    this.silhouetteRadii = null;
+  }
+
+  setSilhouette(radii) {
+    this.silhouetteRadii = radii;
   }
 
   sin(deg) {
@@ -204,6 +273,12 @@ class FlameContourRenderer {
   update(dt) {
     if (!this.config) return;
     this.time += dt * (this.config.speed || 1);
+    const isSoft = (this.config.smoothness || 0) > 0.5;
+    if (isSoft) {
+      this._updateStreaks(dt);
+    } else {
+      this._updateBolts(dt);
+    }
   }
 
   resize(w, h) {
@@ -214,13 +289,44 @@ class FlameContourRenderer {
     this.outerGrad = null;
   }
 
-  buildFlamePoints(scaleMul) {
+  _constrainPoints(points) {
+    const maxUp = this.h * 0.42;
+    const maxDown = this.h * 0.42;
+    let upScale = 1.0;
+    let downScale = 1.0;
+
+    for (const p of points) {
+      const dy = p.y - this.cy;
+      if (dy < 0 && -dy > maxUp) {
+        upScale = Math.min(upScale, maxUp / (-dy));
+      } else if (dy > 0 && dy > maxDown) {
+        downScale = Math.min(downScale, maxDown / dy);
+      }
+    }
+
+    if (upScale < 1.0 || downScale < 1.0) {
+      for (const p of points) {
+        const dy = p.y - this.cy;
+        if (dy < 0) {
+          p.y = this.cy + dy * upScale;
+        } else {
+          p.y = this.cy + dy * downScale;
+        }
+      }
+    }
+
+    return points;
+  }
+
+  _buildOrganicFlamePoints(scaleMul) {
     const f = this.config;
-    if (!f) return [];
     const intensity = f.intensity || 1.0;
-    const baseW = this.w * 0.24 * (f.thickness || 0.6) * intensity * scaleMul;
-    const baseH = this.h * 0.27 * intensity * scaleMul;
-    const flameH = baseH * (f.height || 1.0);
+    const baseW = this.w * 0.183 * scaleMul;
+    const topH = this.h * 0.383 * scaleMul;
+    const botH = this.h * 0.16 * scaleMul;
+    const modW = 0.95 + (f.thickness || 0.6) * 0.5 * intensity;
+    const modTop = 0.8 + (f.height || 1.0) * 0.15 * intensity;
+    const modBot = 0.9 + intensity * 0.1;
     const t = this.time;
     const jagged = f.jaggedness || 0.5;
 
@@ -232,21 +338,83 @@ class FlameContourRenderer {
 
       const cosA = this.cos(degIdx);
       const sinA = this.sin(degIdx);
-
       const isTop = sinA < 0;
-      const upBias = isTop ? 1.0 + Math.abs(sinA) * (f.height || 1.0) * 1.3 : 1.0;
+      const absSin = Math.abs(sinA);
+
+      const dirScale = isTop ? 0.4 + absSin * 0.6 : 0.15;
+
+      const tongueA = Math.sin(angle * 6 + t * 2.2 + this.flameOffsets[0]);
+      const tongueB = Math.sin(angle * 11 + t * 3.8 + this.flameOffsets[1]) * 0.4;
+      const tongueC = Math.sin(angle * 3 + t * 1.3 + this.flameOffsets[2]) * 0.3;
+      const rawTongue = tongueA + tongueB + tongueC;
+      const tongueAmp = (0.45 + Math.max(0, rawTongue) * 0.85) * jagged * 0.45 * dirScale;
+
+      const n1 = Math.sin(t * 1.5 + this.flameOffsets[i] + angle * 2.5) * 0.12 * dirScale;
+      const n2 = Math.sin(t * 2.8 + this.flameOffsets[i] * 1.5 + angle * 4) * 0.06 * dirScale;
+      const noise = n1 + n2;
+
+      const flameMod = 1.0 + tongueAmp + noise;
+
+      const horizTaper = isTop
+        ? 1.0 - Math.pow(absSin, 1.8) * 0.45
+        : 1.0 - Math.pow(sinA, 4) * 0.25;
+      const rx = baseW * modW * flameMod * horizTaper;
+      const ry = (isTop ? topH * modTop : botH * modBot) * flameMod;
+
+      points.push({
+        x: this.cx + cosA * rx,
+        y: this.cy + sinA * ry,
+      });
+    }
+    return points;
+  }
+
+  buildFlamePoints(scaleMul) {
+    const f = this.config;
+    if (!f) return [];
+
+    if (f.contourStyle === 'flame') {
+      return this._buildOrganicFlamePoints(scaleMul);
+    }
+
+    const intensity = f.intensity || 1.0;
+    const baseW = this.w * 0.183 * scaleMul;
+    const topH = this.h * 0.383 * scaleMul;
+    const botH = this.h * 0.16 * scaleMul;
+    const modW = 0.95 + (f.thickness || 0.6) * 0.5 * intensity;
+    const modTop = 0.8 + (f.height || 1.0) * 0.15 * intensity;
+    const modBot = 0.9 + intensity * 0.1;
+    const t = this.time;
+    const jagged = f.jaggedness || 0.5;
+
+    const points = [];
+    for (let i = 0; i < MAX_FLAME_POINTS; i++) {
+      const frac = i / MAX_FLAME_POINTS;
+      const angle = frac * TAU;
+      const degIdx = (frac * 360) | 0;
+
+      const cosA = this.cos(degIdx);
+      const sinA = this.sin(degIdx);
+      const isTop = sinA < 0;
+      const absSin = Math.abs(sinA);
+
+      const dirScale = isTop ? 0.4 + absSin * 0.6 : 0.15;
 
       const isSpike = i % 2 === 0;
-      const spikeAmp = isSpike
-        ? 1.0 + jagged * (0.4 + 0.35 * Math.sin(t * 3.2 + this.flameOffsets[i]))
-        : 1.0 - jagged * (0.15 + 0.1 * Math.sin(t * 2.8 + this.flameOffsets[i] * 1.3));
+      const rawSpike = isSpike
+        ? jagged * (0.4 + 0.35 * Math.sin(t * 3.2 + this.flameOffsets[i]))
+        : -jagged * (0.15 + 0.1 * Math.sin(t * 2.8 + this.flameOffsets[i] * 1.3));
+      const spikeAmp = 1.0 + rawSpike * dirScale;
 
-      const n1 = Math.sin(t * 2.5 + this.flameOffsets[i] + angle * 4) * 0.2;
-      const n2 = Math.sin(t * 5.0 + this.flameOffsets[i] * 2.1 + angle * 7) * 0.12 * jagged;
-      const noise = (n1 + n2) * upBias;
+      const n1 = Math.sin(t * 2.5 + this.flameOffsets[i] + angle * 4) * 0.2 * dirScale;
+      const n2 = Math.sin(t * 5.0 + this.flameOffsets[i] * 2.1 + angle * 7) * 0.12 * jagged * dirScale;
+      const noise = n1 + n2;
 
-      const rx = baseW * spikeAmp * (1 + noise * 0.5) * upBias;
-      const ry = (isTop ? flameH : baseH * 0.65) * spikeAmp * (1 + noise * 0.3);
+      const horizTaper = isTop
+        ? 1.0 - Math.pow(absSin, 1.8) * 0.45
+        : 1.0 - Math.pow(sinA, 4) * 0.25;
+      const rx = baseW * modW * spikeAmp * (1 + noise * 0.3) * horizTaper;
+      const ry = (isTop ? topH * modTop : botH * modBot) * spikeAmp * (1 + noise * 0.3);
 
       points.push({
         x: this.cx + cosA * rx,
@@ -259,13 +427,14 @@ class FlameContourRenderer {
   buildFlamePath(ctx, points) {
     const len = points.length;
     const s = this.config?.smoothness ?? 0.2;
+    const isFlameStyle = this.config?.contourStyle === 'flame';
 
     ctx.beginPath();
 
-    if (s < 0.15) {
+    if (!isFlameStyle && s < 0.15) {
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < len; i++) ctx.lineTo(points[i].x, points[i].y);
-    } else if (s > 0.85) {
+    } else if (isFlameStyle || s > 0.5) {
       const first = points[0], second = points[1];
       ctx.moveTo((first.x + second.x) / 2, (first.y + second.y) / 2);
       for (let i = 1; i < len; i++) {
@@ -274,12 +443,11 @@ class FlameContourRenderer {
         ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) / 2, (curr.y + next.y) / 2);
       }
     } else {
-      const smoothThreshold = 1.0 - s;
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < len; i++) {
         const curr = points[i];
         const isValley = i % 2 !== 0;
-        if (isValley && Math.random() > smoothThreshold) {
+        if (isValley && (this.flameOffsets[i % MAX_FLAME_POINTS] % 1) > (1.0 - s)) {
           const next = points[(i + 1) % len];
           ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) / 2, (curr.y + next.y) / 2);
         } else {
@@ -327,29 +495,30 @@ class FlameContourRenderer {
     ctx.clip();
 
     const phase = this.time * 1.8;
-    const bandR = Math.max(this.w, this.h) * 0.4 * intensity;
-    const grad = ctx.createRadialGradient(this.cx, this.cy, bandR * 0.3, this.cx, this.cy, bandR);
+    const bandR = Math.max(this.w, this.h) * 0.45 * intensity;
+    const grad = ctx.createRadialGradient(this.cx, this.cy, bandR * 0.2, this.cx, this.cy, bandR);
 
     const pulseA = 0.5 + 0.45 * Math.sin(phase);
     const pulseB = 0.5 + 0.45 * Math.sin(phase + 2.1);
-    const alphaA = Math.round(pulseA * 220).toString(16).padStart(2, '0');
-    const alphaB = Math.round(pulseB * 200).toString(16).padStart(2, '0');
+    const alphaA = Math.round(pulseA * 200).toString(16).padStart(2, '0');
+    const alphaB = Math.round(pulseB * 180).toString(16).padStart(2, '0');
 
     grad.addColorStop(0, baseColor + '00');
-    grad.addColorStop(0.2, baseColor + alphaA);
-    grad.addColorStop(0.5, tipColor + alphaB);
-    grad.addColorStop(0.75, tipColor + alphaA);
-    grad.addColorStop(0.9, '#FFFFFF' + Math.round(pulseA * 100).toString(16).padStart(2, '0'));
-    grad.addColorStop(1, baseColor + '44');
+    grad.addColorStop(0.15, baseColor + '00');
+    grad.addColorStop(0.35, baseColor + alphaA);
+    grad.addColorStop(0.55, tipColor + alphaB);
+    grad.addColorStop(0.72, tipColor + alphaA);
+    grad.addColorStop(0.88, baseColor + 'BB');
+    grad.addColorStop(1, baseColor + '55');
 
-    ctx.globalAlpha = 0.75;
+    ctx.globalAlpha = 0.8;
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.w, this.h);
 
     ctx.globalCompositeOperation = 'destination-out';
     this.buildFlamePath(ctx, innerPts);
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.95;
     ctx.fill();
 
     ctx.restore();
@@ -369,15 +538,17 @@ class FlameContourRenderer {
       ctx.translate(-this.cx, -this.cy);
     }
 
-    const flameR = Math.max(this.w, this.h) * 0.38 * intensity;
+    const flameR = Math.max(this.w, this.h) * 0.45 * intensity;
     const hollowGrad = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, flameR);
     hollowGrad.addColorStop(0, baseColor + '00');
     hollowGrad.addColorStop(0.35, baseColor + '00');
-    hollowGrad.addColorStop(0.50, baseColor + '15');
-    hollowGrad.addColorStop(0.62, baseColor + '66');
-    hollowGrad.addColorStop(0.74, baseColor + 'CC');
-    hollowGrad.addColorStop(0.85, tipColor + 'FF');
-    hollowGrad.addColorStop(1, tipColor + 'EE');
+    hollowGrad.addColorStop(0.50, baseColor + '06');
+    hollowGrad.addColorStop(0.60, baseColor + '18');
+    hollowGrad.addColorStop(0.70, baseColor + '55');
+    hollowGrad.addColorStop(0.80, baseColor + '99');
+    hollowGrad.addColorStop(0.88, tipColor + 'CC');
+    hollowGrad.addColorStop(0.95, tipColor + 'EE');
+    hollowGrad.addColorStop(1, tipColor + 'DD');
 
     ctx.globalAlpha *= baseAlpha;
 
@@ -388,6 +559,24 @@ class FlameContourRenderer {
     ctx.fill();
 
     this.buildFlamePath(ctx, points);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowBlur = 70;
+    ctx.shadowColor = baseColor;
+    ctx.strokeStyle = baseColor + '33';
+    ctx.lineWidth = 12;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    this.buildFlamePath(ctx, points);
+    ctx.shadowBlur = 40;
+    ctx.shadowColor = tipColor;
+    ctx.strokeStyle = tipColor + '55';
+    ctx.lineWidth = 7;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    ctx.globalCompositeOperation = 'source-over';
+    this.buildFlamePath(ctx, points);
     ctx.shadowBlur = 25;
     ctx.shadowColor = tipColor;
     ctx.strokeStyle = tipColor + 'CC';
@@ -397,9 +586,9 @@ class FlameContourRenderer {
     ctx.stroke();
 
     this.buildFlamePath(ctx, points);
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 8;
     ctx.shadowColor = '#FFFFFF';
-    ctx.strokeStyle = '#FFFFFF66';
+    ctx.strokeStyle = '#FFFFFF77';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -434,33 +623,270 @@ class FlameContourRenderer {
   }
 
   drawEdgeFade(ctx) {
-    const rx = this.w * 0.5;
-    const ry = this.h * 0.5;
+    const rx = this.w * 0.55;
+    const ry = this.h * 0.65;
+    const fadeCy = this.h * 0.5;
     ctx.save();
     ctx.globalCompositeOperation = 'destination-in';
-    const grad = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, Math.max(rx, ry));
+    const grad = ctx.createRadialGradient(this.cx, fadeCy, 0, this.cx, fadeCy, Math.max(rx, ry));
     grad.addColorStop(0, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.75, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.92, 'rgba(0,0,0,0.3)');
+    grad.addColorStop(0.82, 'rgba(0,0,0,1)');
+    grad.addColorStop(0.94, 'rgba(0,0,0,0.3)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(this.cx, this.cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.cx, fadeCy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  draw(ctx) {
+  _spawnBolt() {
+    const f = this.config;
+    if (!f) return;
+    const intensity = f.intensity || 1.0;
+
+    const angle = Math.random() * TAU;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    const rFrac = 0.3 + Math.random() * 0.5;
+
+    let startX, startY;
+    if (this.silhouetteRadii) {
+      const degIdx = Math.round((angle / TAU) * 360) % 360;
+      const silR = this.silhouetteRadii[degIdx];
+      startX = this.cx + cosA * silR * rFrac;
+      startY = this.cy + sinA * silR * rFrac;
+    } else {
+      const baseW = this.w * 0.18 * (f.thickness || 0.6) * intensity;
+      const baseH = this.h * 0.22 * intensity;
+      startX = this.cx + cosA * baseW * rFrac;
+      startY = this.cy + sinA * baseH * rFrac;
+    }
+
+    const boltAngle = angle + (Math.random() - 0.5) * 1.2;
+    const boltLen = (30 + Math.random() * 60) * intensity;
+    const segments = 4 + Math.floor(Math.random() * 5);
+    const pts = [{ x: startX, y: startY }];
+
+    for (let i = 1; i <= segments; i++) {
+      const frac = i / segments;
+      const baseX = startX + Math.cos(boltAngle) * boltLen * frac;
+      const baseY = startY + Math.sin(boltAngle) * boltLen * frac;
+      const perpX = -Math.sin(boltAngle);
+      const perpY = Math.cos(boltAngle);
+      const jitter = (Math.random() - 0.5) * boltLen * 0.35;
+      pts.push({
+        x: baseX + perpX * jitter,
+        y: baseY + perpY * jitter,
+      });
+    }
+
+    const hasBranch = Math.random() < 0.4;
+    let branch = null;
+    if (hasBranch && pts.length > 2) {
+      const brIdx = 1 + Math.floor(Math.random() * (pts.length - 2));
+      const brAngle = boltAngle + (Math.random() - 0.5) * 1.8;
+      const brLen = boltLen * (0.25 + Math.random() * 0.3);
+      const brSegs = 2 + Math.floor(Math.random() * 2);
+      const brPts = [{ x: pts[brIdx].x, y: pts[brIdx].y }];
+      for (let j = 1; j <= brSegs; j++) {
+        const fr = j / brSegs;
+        const bx = pts[brIdx].x + Math.cos(brAngle) * brLen * fr;
+        const by = pts[brIdx].y + Math.sin(brAngle) * brLen * fr;
+        const px = -Math.sin(brAngle);
+        const py = Math.cos(brAngle);
+        const jit = (Math.random() - 0.5) * brLen * 0.4;
+        brPts.push({ x: bx + px * jit, y: by + py * jit });
+      }
+      branch = brPts;
+    }
+
+    return {
+      points: pts,
+      branch,
+      life: 1.0,
+      maxLife: 0.08 + Math.random() * 0.14,
+      width: 1.0 + Math.random() * 1.5,
+    };
+  }
+
+  _updateBolts(dt) {
+    if (!this.config) return;
+
+    this.boltTimer += dt;
+    if (this.boltTimer >= this.boltInterval) {
+      this.boltTimer = 0;
+      this.boltInterval = 0.06 + Math.random() * 0.15;
+      const count = Math.random() < 0.3 ? 2 : 1;
+      for (let i = 0; i < count; i++) {
+        const bolt = this._spawnBolt();
+        if (bolt) this.bolts.push(bolt);
+      }
+    }
+
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const b = this.bolts[i];
+      b.life -= dt / b.maxLife;
+      if (b.life <= 0) {
+        this.bolts.splice(i, 1);
+      }
+    }
+  }
+
+  _drawBoltPath(ctx, pts, alpha, width, color, glowColor) {
+    if (pts.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = width + 3;
+    ctx.lineJoin = 'bevel';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = Math.max(0.5, width * 0.4);
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _updateStreaks(dt) {
+    if (!this.config) return;
+    this.streakTimer += dt;
+    if (this.streakTimer >= 0.08 + Math.random() * 0.14) {
+      this.streakTimer = 0;
+      const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
+      const startR = this.w * 0.04 + Math.random() * this.w * 0.06;
+      const len = this.w * 0.18 + Math.random() * this.w * 0.28;
+      this.streaks.push({
+        ox: this.cx + Math.cos(angle) * startR,
+        oy: this.cy + Math.sin(angle) * startR,
+        dx: Math.cos(angle),
+        dy: Math.sin(angle),
+        len,
+        progress: 0,
+        speed: 1.2 + Math.random() * 1.6,
+        tailLen: 0.45 + Math.random() * 0.25,
+        width: 0.6 + Math.random() * 1.2,
+        alive: true,
+      });
+    }
+    for (let i = this.streaks.length - 1; i >= 0; i--) {
+      const s = this.streaks[i];
+      s.progress += dt * s.speed;
+      if (s.progress > 1.0 + s.tailLen) {
+        this.streaks.splice(i, 1);
+      }
+    }
+  }
+
+  drawStreaks(ctx) {
+    if (!this.config || this.streaks.length === 0) return;
+    const baseColor = this.config.tipColor || this.config.baseColor || '#FFFFFF';
+    const glowColor = this.config.baseColor || '#FFAACC';
+
+    for (const s of this.streaks) {
+      const headT = Math.min(s.progress, 1.0);
+      const tailT = Math.max(0, s.progress - s.tailLen);
+      const headX = s.ox + s.dx * s.len * headT;
+      const headY = s.oy + s.dy * s.len * headT;
+      const tailX = s.ox + s.dx * s.len * tailT;
+      const tailY = s.oy + s.dy * s.len * tailT;
+
+      const fadeOut = s.progress > 1.0 ? 1.0 - (s.progress - 1.0) / s.tailLen : 1.0;
+      const alpha = Math.max(0, fadeOut) * 0.55;
+      if (alpha <= 0) continue;
+
+      const grad = ctx.createLinearGradient(tailX, tailY, headX, headY);
+      grad.addColorStop(0, glowColor + '00');
+      grad.addColorStop(0.5, glowColor + '66');
+      grad.addColorStop(1, baseColor + 'FF');
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = alpha;
+
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 15;
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = s.width + 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(headX, headY);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = Math.max(0.5, s.width * 0.4);
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(headX, headY);
+      ctx.stroke();
+
+      ctx.shadowColor = '#FFFFFF';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(headX, headY, s.width * 0.8, 0, TAU);
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  drawBolts(ctx) {
+    if (!this.config || this.bolts.length === 0) return;
+    const baseColor = this.config.tipColor || this.config.baseColor || '#FFFFFF';
+    const glowColor = this.config.baseColor || '#FFDD00';
+
+    for (const bolt of this.bolts) {
+      const alpha = Math.pow(bolt.life, 0.5);
+      this._drawBoltPath(ctx, bolt.points, alpha, bolt.width, baseColor, glowColor);
+      if (bolt.branch) {
+        this._drawBoltPath(ctx, bolt.branch, alpha * 0.7, bolt.width * 0.6, baseColor, glowColor);
+      }
+    }
+  }
+
+  drawAuraOnly(ctx) {
     if (!this.config) return;
 
     const f = this.config;
     const baseColor = f.baseColor || '#FF6600';
     const tipColor = f.tipColor || '#FFDD00';
 
-    this.drawOuterGlow(ctx);
-
     const outerPts = this.buildFlamePoints(1.0);
     const innerPts = this.buildFlamePoints(0.6);
+
+    for (let i = 0; i < innerPts.length && i < outerPts.length; i++) {
+      const dy = innerPts[i].y - this.cy;
+      if (dy > 0) {
+        const blend = Math.min(1, dy / (this.h * 0.15)) * 0.88;
+        innerPts[i].x += (outerPts[i].x - innerPts[i].x) * blend;
+        innerPts[i].y += (outerPts[i].y - innerPts[i].y) * blend;
+      }
+    }
 
     this.drawFlameBand(ctx, outerPts, innerPts, baseColor, tipColor);
 
@@ -471,8 +897,52 @@ class FlameContourRenderer {
     this.drawFlameShape(ctx, outerPts, baseColor, tipColor, 1.0, 0.8);
 
     this.drawFlameInnerBorder(ctx, innerPts, baseColor, tipColor);
+  }
 
-    this.drawEdgeFade(ctx);
+  drawLowerBodyGlow(ctx) {
+    if (!this.config) return;
+    const baseColor = this.config.baseColor || '#FF6600';
+    const r = parseInt(baseColor.slice(1, 3), 16) || 0;
+    const g = parseInt(baseColor.slice(3, 5), 16) || 0;
+    const b = parseInt(baseColor.slice(5, 7), 16) || 0;
+
+    const pulse = 0.6 + 0.4 * Math.sin(this.time * 1.2);
+    const glowW = this.w * 0.35;
+    const glowH = this.h * 0.28;
+    const glowCy = this.cy + this.h * 0.12;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.18 * pulse;
+
+    const grad = ctx.createRadialGradient(this.cx, glowCy, 0, this.cx, glowCy, Math.max(glowW, glowH));
+    grad.addColorStop(0, `rgba(${r},${g},${b},0.35)`);
+    grad.addColorStop(0.3, `rgba(${r},${g},${b},0.2)`);
+    grad.addColorStop(0.6, `rgba(${r},${g},${b},0.08)`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(this.cx, glowCy, glowW, glowH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawBoltsAndGlow(ctx) {
+    if (!this.config) return;
+    const isSoft = (this.config.smoothness || 0) > 0.5;
+    if (isSoft) {
+      this.drawStreaks(ctx);
+    } else {
+      this.drawBolts(ctx);
+    }
+    this.drawLowerBodyGlow(ctx);
+  }
+
+  draw(ctx) {
+    if (!this.config) return;
+    this.drawAuraOnly(ctx);
+    this.drawBolts(ctx);
   }
 }
 
@@ -1366,7 +1836,8 @@ Output schema:
   "thickness": 0.3-1.0,
   "dualLayer": true/false,
   "dualColor": "#hex or null",
-  "intensity": 0.5-1.5
+  "intensity": 0.5-1.5,
+  "contourStyle": "flame" | "spiky" | null
 }
 
 Parameter guide:
@@ -1380,9 +1851,11 @@ Parameter guide:
 - dualLayer: Whether to render a secondary scaled-up layer behind the main flame for depth
 - dualColor: Color for the dual layer (usually darker or contrasting). Only used if dualLayer=true
 - intensity: Overall scale and glow intensity multiplier (0.5=subtle, 1.5=overwhelming)
+- contourStyle: "flame" for organic curvy flame-lick boundary (fire/energy/power/super saiyan themes), "spiky" for sharp jagged electric boundary, or null/omit for default behavior
 
 Theme mapping rules:
-- Fire / energy / power / super saiyan: jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8
+- Fire / flame / inferno / blaze (explicitly fire-themed): jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8, contourStyle "flame"
+- Energy / power / super saiyan / aura / ki: jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8 (no contourStyle - uses default spiky)
 - Electric / lightning / shock: jaggedness 0.8-1.0, smoothness 0.0-0.15, height 1.0-1.2, speed 1.3-2.0
 - Wind / nature / calm / healing: jaggedness 0.2-0.4, smoothness 0.6-0.9, height 0.6-0.9, speed 0.5-0.8
 - Cosmic / void / dark / shadow: jaggedness 0.7-0.9, smoothness 0.1-0.2, height 1.2-1.5, dualLayer=true, dualColor=dark
@@ -1410,7 +1883,7 @@ Return only the JSON object.`;
 const PROMPT_EXAMPLES = `=== FULL EXAMPLES ===
 
 User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FF4500","tipColor":"#FFD700","speed":1.2,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.1},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
+{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FF4500","tipColor":"#FFD700","speed":1.2,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.1,"contourStyle":"flame"},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
 User: "super saiyan"
 {"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FFD700","tipColor":"#FFFFFF","speed":1.5,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.3},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
@@ -1505,13 +1978,21 @@ export default function AuraStudio() {
   const outerShapeRef = useRef(null);
   const overlayShapeRef = useRef(null);
   const fileInputRef = useRef(null);
+  const silhouetteRef = useRef(null);
   const lastFrameTimeRef = useRef(performance.now());
 
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => setAvatar(e.target.result);
+      reader.onload = async (e) => {
+        const src = e.target.result;
+        setAvatar(src);
+        const radii = await extractSilhouette(src, 480, 560);
+        silhouetteRef.current = radii;
+        if (outerShapeRef.current) outerShapeRef.current.setSilhouette(radii);
+        if (overlayShapeRef.current) overlayShapeRef.current.setSilhouette(radii);
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -1728,6 +2209,7 @@ export default function AuraStudio() {
       }
       outerShapeRef.current.resize(outerCanvas.width, outerCanvas.height);
       outerShapeRef.current.setConfig(shapeConfig);
+      if (silhouetteRef.current) outerShapeRef.current.setSilhouette(silhouetteRef.current);
     }
 
     const overlayCanvas = overlayCanvasRef.current;
@@ -1737,6 +2219,7 @@ export default function AuraStudio() {
       }
       overlayShapeRef.current.resize(overlayCanvas.width, overlayCanvas.height);
       overlayShapeRef.current.setConfig(shapeConfig);
+      if (silhouetteRef.current) overlayShapeRef.current.setSilhouette(silhouetteRef.current);
     }
   }, [activeAura, customAuraConfig, densityMultiplier, speedMultiplier, sizeMultiplier, activeShapePreset]);
 
@@ -1790,32 +2273,23 @@ export default function AuraStudio() {
       const outerCtx = outerCanvas.getContext('2d');
       outerCtx.clearRect(0, 0, outerCanvas.width, outerCanvas.height);
       outerShapeRef.current.update(dt);
-      outerShapeRef.current.draw(outerCtx);
+      outerShapeRef.current.drawAuraOnly(outerCtx);
     }
 
-    // Render overlay on top of avatar (if enabled)
+    // Overlay canvas: bolts + lower-body glow on top of avatar (always active when aura is on)
     const overlayCanvas = overlayCanvasRef.current;
-    if (overlayCanvas && showOverlayOnAvatar) {
+    if (overlayCanvas && outerShapeRef.current && outerShapeRef.current.config) {
       const overlayCtx = overlayCanvas.getContext('2d');
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-      
+
       if (!overlayShapeRef.current) {
         overlayShapeRef.current = new FlameContourRenderer(overlayCanvas.width, overlayCanvas.height);
       }
       overlayShapeRef.current.resize(overlayCanvas.width, overlayCanvas.height);
-      
-      // Sync config from outer shape
-      if (outerShapeRef.current && outerShapeRef.current.config) {
-        overlayShapeRef.current.setConfig(outerShapeRef.current.config);
-      }
-      
-      if (overlayShapeRef.current.config) {
-        overlayShapeRef.current.update(dt);
-        overlayCtx.save();
-        overlayCtx.globalAlpha = 0.35; // 65% transparency - more visible for testing
-        overlayShapeRef.current.draw(overlayCtx);
-        overlayCtx.restore();
-      }
+      overlayShapeRef.current.setConfig(outerShapeRef.current.config);
+      if (silhouetteRef.current) overlayShapeRef.current.setSilhouette(silhouetteRef.current);
+      overlayShapeRef.current.update(dt);
+      overlayShapeRef.current.drawBoltsAndGlow(overlayCtx);
     } else if (overlayCanvas) {
       const overlayCtx = overlayCanvas.getContext('2d');
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
@@ -1826,16 +2300,16 @@ export default function AuraStudio() {
 
   useEffect(() => {
     if (canvasRef.current) {
-      canvasRef.current.width = 600;
-      canvasRef.current.height = 700;
+      canvasRef.current.width = 480;
+      canvasRef.current.height = 560;
     }
     if (outerCanvasRef.current) {
-      outerCanvasRef.current.width = 600;
-      outerCanvasRef.current.height = 700;
+      outerCanvasRef.current.width = 480;
+      outerCanvasRef.current.height = 560;
     }
     if (overlayCanvasRef.current) {
-      overlayCanvasRef.current.width = 600;
-      overlayCanvasRef.current.height = 700;
+      overlayCanvasRef.current.width = 480;
+      overlayCanvasRef.current.height = 560;
     }
     lastFrameTimeRef.current = performance.now();
     animationRef.current = requestAnimationFrame(animate);
@@ -2181,14 +2655,14 @@ export default function AuraStudio() {
               className="absolute inset-0 w-full h-full z-10 pointer-events-none"
             />
 
-            {/* Outer shape canvas — outermost animated container wrapping glow + particles */}
+            {/* Outer shape canvas — aura flame behind the character */}
             <canvas
               ref={outerCanvasRef}
-              className="absolute inset-0 w-full h-full z-[25] pointer-events-none"
+              className="absolute inset-0 w-full h-full z-[15] pointer-events-none"
             />
 
             {/* Avatar */}
-            <div className="relative z-20 w-72 h-72 md:w-96 md:h-96 transition-all duration-700 ease-out">
+            <div className="relative z-20 w-56 h-56 md:w-72 md:h-72 transition-all duration-700 ease-out">
               {avatar ? (
                 <>
                   <img
@@ -2204,8 +2678,8 @@ export default function AuraStudio() {
                   {/* Overlay canvas — renders outer shape ON TOP of avatar with transparency */}
                   <canvas
                     ref={overlayCanvasRef}
-                    width={600}
-                    height={700}
+                    width={480}
+                    height={560}
                     className="absolute inset-0 w-full h-full pointer-events-none"
                     style={{ 
                       transform: 'translate(-50%, -50%)',
@@ -2231,7 +2705,7 @@ export default function AuraStudio() {
             </div>
 
             {/* Soft vignette */}
-            <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{background: 'radial-gradient(circle, transparent 35%, rgba(0,0,0,0.6) 100%)'}} />
+            <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{background: 'radial-gradient(circle, transparent 55%, rgba(0,0,0,0.4) 100%)'}} />
           </div>
 
           {/* Bottom controls */}
