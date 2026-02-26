@@ -1496,6 +1496,8 @@ export default function AuraStudio() {
   const [speedMultiplier, setSpeedMultiplier] = useState(1.0);
   const [sizeMultiplier, setSizeMultiplier] = useState(1.0);
   const [activeShapePreset, setActiveShapePreset] = useState(null);
+  const [jsonInput, setJsonInput] = useState('');
+  const [importError, setImportError] = useState('');
 
   const canvasRef = useRef(null);
   const outerCanvasRef = useRef(null);
@@ -1513,6 +1515,61 @@ export default function AuraStudio() {
       const reader = new FileReader();
       reader.onload = (e) => setAvatar(e.target.result);
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleJsonImport = () => {
+    setImportError('');
+    try {
+      if (!jsonInput.trim()) {
+        setImportError('Please paste a JSON configuration');
+        return;
+      }
+
+      // Parse the JSON
+      const parsed = JSON.parse(jsonInput);
+
+      // Extract the aura config - handle both direct config and nested API response
+      let config;
+      if (parsed.data && parsed.data.value && parsed.data.value.output) {
+        // Nested API response format
+        config = parsed.data.value.output;
+      } else if (parsed.output) {
+        // Wrapped in output
+        config = parsed.output;
+      } else if (parsed.name && parsed.entities) {
+        // Direct config format
+        config = parsed;
+      } else {
+        setImportError('Invalid JSON structure. Expected aura configuration with name, entities, etc.');
+        return;
+      }
+
+      // Validate that it has the required fields
+      if (!config.entities || !Array.isArray(config.entities)) {
+        setImportError('Invalid config: missing or invalid "entities" array');
+        return;
+      }
+
+      console.log("📥 Imported Aura Config:", JSON.stringify(config, null, 2));
+
+      // Apply the configuration
+      setCustomAuraConfig(config);
+      setActiveAura(AURA_TYPES.CUSTOM);
+      setAiMessage(`Imported: ${config.name || 'Custom Aura'}${config.description ? ' - ' + config.description : ''}`);
+
+      // Clear physics testing state for new aura
+      setSelectedPhysics([]);
+      setOriginalAuraConfig(null);
+      setOriginalAuraType(null);
+      setActiveShapePreset(null);
+
+      // Clear the input after successful import
+      setJsonInput('');
+
+    } catch (error) {
+      console.error("JSON Import Error:", error);
+      setImportError(`Error parsing JSON: ${error.message}`);
     }
   };
 
@@ -2366,6 +2423,7 @@ export default function AuraStudio() {
               <div className="flex items-center justify-between px-2 py-2 border-b border-amber-500/10 bg-amber-500/[0.03] flex-shrink-0">
                 <div className="flex gap-1">
                   {[
+                    { id: 'import', label: 'Import', color: '#10b981' },
                     { id: 'glow', label: 'Glow', color: '#ff9500' },
                     { id: 'particle', label: 'Particle', color: '#00d4ff' },
                     { id: 'outerShape', label: 'OuterShape', color: '#a855f7' },
@@ -2392,52 +2450,99 @@ export default function AuraStudio() {
                   onClick={() => {
                     if (activePromptTab === 'glow') setPromptGlow(PROMPT_LAYER_GLOW);
                     else if (activePromptTab === 'particle') setPromptParticle(PROMPT_LAYER_PARTICLE);
-                    else setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                    else if (activePromptTab === 'outerShape') setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                    else if (activePromptTab === 'import') {
+                      setJsonInput('');
+                      setImportError('');
+                    }
                   }}
                   className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-amber-500/10"
                 >
-                  Reset
+                  {activePromptTab === 'import' ? 'Clear' : 'Reset'}
                 </button>
               </div>
 
               {/* Tab description */}
               <div className="px-3 py-2 border-b border-white/[0.04] bg-black/20">
                 <span className="text-[9px] text-gray-500">
+                  {activePromptTab === 'import' && 'Paste JSON configuration to instantly render your aura'}
                   {activePromptTab === 'glow' && 'Controls: glowColor, background, renderMode, density'}
                   {activePromptTab === 'particle' && 'Controls: entities array (shapes, movement, style, size, speed)'}
                   {activePromptTab === 'outerShape' && 'Controls: outerShape object (animated hollow ring)'}
                 </span>
               </div>
 
-              {/* Textarea for active tab */}
-              <textarea
-                value={
-                  activePromptTab === 'glow' ? promptGlow :
-                  activePromptTab === 'particle' ? promptParticle :
-                  promptOuterShape
-                }
-                onChange={(e) => {
-                  if (activePromptTab === 'glow') setPromptGlow(e.target.value);
-                  else if (activePromptTab === 'particle') setPromptParticle(e.target.value);
-                  else setPromptOuterShape(e.target.value);
-                }}
-                className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed"
-                spellCheck={false}
-              />
+              {/* Content for active tab */}
+              {activePromptTab === 'import' ? (
+                <div className="flex-1 flex flex-col">
+                  <textarea
+                    value={jsonInput}
+                    onChange={(e) => setJsonInput(e.target.value)}
+                    placeholder='Paste your JSON here, e.g.:
+{
+  "success": true,
+  "data": {
+    "value": {
+      "output": {
+        "name": "Emerald Surge",
+        "description": "...",
+        "glowColor": "#22C55E",
+        ...
+      }
+    }
+  }
+}'
+                    className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed placeholder:text-gray-700"
+                    spellCheck={false}
+                  />
 
-              {/* Reset all button */}
-              <div className="px-3 py-2 border-t border-white/[0.04] bg-black/20 flex justify-end">
-                <button
-                  onClick={() => {
-                    setPromptGlow(PROMPT_LAYER_GLOW);
-                    setPromptParticle(PROMPT_LAYER_PARTICLE);
-                    setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                  {/* Import button and error display */}
+                  <div className="px-3 py-2 border-t border-white/[0.04] bg-black/20">
+                    <button
+                      onClick={handleJsonImport}
+                      className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all"
+                    >
+                      Apply JSON Configuration
+                    </button>
+                    {importError && (
+                      <div className="mt-2 px-2 py-1.5 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-400">
+                        {importError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  value={
+                    activePromptTab === 'glow' ? promptGlow :
+                    activePromptTab === 'particle' ? promptParticle :
+                    promptOuterShape
+                  }
+                  onChange={(e) => {
+                    if (activePromptTab === 'glow') setPromptGlow(e.target.value);
+                    else if (activePromptTab === 'particle') setPromptParticle(e.target.value);
+                    else setPromptOuterShape(e.target.value);
                   }}
-                  className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
-                >
-                  Reset All Layers
-                </button>
-              </div>
+                  className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed"
+                  spellCheck={false}
+                />
+              )}
+
+              {/* Reset all button (only show for non-import tabs) */}
+              {activePromptTab !== 'import' && (
+                <div className="px-3 py-2 border-t border-white/[0.04] bg-black/20 flex justify-end">
+                  <button
+                    onClick={() => {
+                      setPromptGlow(PROMPT_LAYER_GLOW);
+                      setPromptParticle(PROMPT_LAYER_PARTICLE);
+                      setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
+                    }}
+                    className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+                  >
+                    Reset All Layers
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
