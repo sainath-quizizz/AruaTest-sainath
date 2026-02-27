@@ -1526,30 +1526,116 @@ export default function AuraStudio() {
         return;
       }
 
-      // Parse the JSON
-      const parsed = JSON.parse(jsonInput);
+      // Clean and preprocess the JSON input
+      let cleanedJson = jsonInput.trim();
+      
+      // Remove BOM (Byte Order Mark) if present
+      if (cleanedJson.charCodeAt(0) === 0xFEFF) {
+        cleanedJson = cleanedJson.slice(1);
+      }
+      
+      // Remove markdown code blocks if present
+      cleanedJson = cleanedJson.replace(/^```json\s*/i, '');
+      cleanedJson = cleanedJson.replace(/^```\s*/i, '');
+      cleanedJson = cleanedJson.replace(/\s*```$/i, '');
+      cleanedJson = cleanedJson.trim();
+      
+      // Normalize all Unicode whitespace to regular spaces
+      // This handles non-breaking spaces, em spaces, and other special whitespace
+      cleanedJson = cleanedJson.replace(/[\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, ' ');
+      
+      // Replace smart quotes with regular quotes
+      cleanedJson = cleanedJson.replace(/[\u201C\u201D]/g, '"'); // Smart double quotes
+      cleanedJson = cleanedJson.replace(/[\u2018\u2019]/g, "'"); // Smart single quotes
+      
+      // Normalize all whitespace sequences (tabs, multiple spaces) to single spaces
+      // But preserve newlines and structure
+      cleanedJson = cleanedJson.replace(/[ \t]+/g, ' ');
+      
+      // Remove any leading/trailing whitespace and newlines
+      cleanedJson = cleanedJson.trim();
+      
+      // Log the first few characters for debugging
+      console.log("🔍 First 50 chars of input:", cleanedJson.substring(0, 50));
+      console.log("🔍 Input length:", cleanedJson.length);
+      console.log("🔍 First char codes:", cleanedJson.charCodeAt(0), cleanedJson.charCodeAt(1), cleanedJson.charCodeAt(2));
+
+      // Try to parse JSON, with fallback to extract JSON object
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanedJson);
+      } catch (parseError) {
+        // If parsing fails, try to extract JSON object using regex
+        console.log("⚠️ Direct parse failed, trying to extract JSON object...");
+        const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            parsed = JSON.parse(jsonMatch[0]);
+            console.log("✅ Successfully extracted and parsed JSON object");
+          } catch {
+            // If that also fails, try one more time with aggressive whitespace normalization
+            const aggressiveClean = jsonMatch[0]
+              .replace(/[\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, ' ') // Unicode spaces
+              .replace(/[ \t]+/g, ' ') // Multiple spaces/tabs to single space
+              .replace(/\n\s*/g, '\n') // Normalize newlines
+              .trim();
+            try {
+              parsed = JSON.parse(aggressiveClean);
+              console.log("✅ Successfully parsed after aggressive cleaning");
+            } catch {
+              throw parseError; // Throw original error
+            }
+          }
+        } else {
+          throw parseError; // Throw original error if no JSON object found
+        }
+      }
+      console.log("🔍 Parsed JSON structure:", Object.keys(parsed));
 
       // Extract the aura config - handle both direct config and nested API response
-      let config;
-      if (parsed.data && parsed.data.value && parsed.data.value.output) {
-        // Nested API response format: data.value.output
-        config = parsed.data.value.output;
-      } else if (parsed.data && parsed.data.output) {
-        // API response format: data.output
+      let config = null;
+      
+      // Check data.output first (most common API format)
+      if (parsed.data && parsed.data.output) {
         config = parsed.data.output;
-      } else if (parsed.output) {
-        // Wrapped in output
+        console.log("✅ Found config at: data.output");
+      } 
+      // Check root level output
+      else if (parsed.output) {
         config = parsed.output;
-      } else if (parsed.name && parsed.entities) {
-        // Direct config format
+        console.log("✅ Found config at: output");
+      } 
+      // Check direct config format
+      else if (parsed.name && parsed.entities) {
         config = parsed;
+        console.log("✅ Found config at: root (direct format)");
+      } 
+      // Try to find output anywhere in the structure
+      else if (parsed.data) {
+        // Check if data itself is the config
+        if (parsed.data.name && parsed.data.entities) {
+          config = parsed.data;
+          console.log("✅ Found config at: data");
+        } else {
+          console.log("❌ Could not find config. Available keys:", Object.keys(parsed));
+          if (parsed.data) console.log("   data keys:", Object.keys(parsed.data));
+          setImportError('Invalid JSON structure. Could not find aura configuration. Expected structure: {data: {output: {...}}} or {output: {...}} or direct config with name and entities.');
+          return;
+        }
       } else {
-        setImportError('Invalid JSON structure. Expected aura configuration with name, entities, etc.');
+        console.log("❌ Could not find config. Available keys:", Object.keys(parsed));
+        setImportError('Invalid JSON structure. Could not find aura configuration. Expected structure: {data: {output: {...}}} or {output: {...}} or direct config with name and entities.');
         return;
       }
 
       // Validate that it has the required fields
+      if (!config) {
+        setImportError('Failed to extract configuration');
+        return;
+      }
+
       if (!config.entities || !Array.isArray(config.entities)) {
+        console.log("❌ Invalid entities:", config.entities);
         setImportError('Invalid config: missing or invalid "entities" array');
         return;
       }
@@ -1572,7 +1658,32 @@ export default function AuraStudio() {
 
     } catch (error) {
       console.error("JSON Import Error:", error);
-      setImportError(`Error parsing JSON: ${error.message}`);
+      
+      // Provide more helpful error messages
+      let errorMessage = `Error parsing JSON: ${error.message}`;
+      
+      if (error.message.includes('position')) {
+        // Extract position from error message
+        const positionMatch = error.message.match(/position (\d+)/);
+        if (positionMatch) {
+          const position = parseInt(positionMatch[1]);
+          const cleanedJson = jsonInput.trim()
+            .replace(/^```json\s*/i, '')
+            .replace(/^```\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+          
+          // Show context around the error
+          const start = Math.max(0, position - 20);
+          const end = Math.min(cleanedJson.length, position + 20);
+          const context = cleanedJson.substring(start, end);
+          const pointer = ' '.repeat(Math.min(20, position)) + '^';
+          
+          errorMessage += `\n\nAt position ${position}:\n${context}\n${pointer}`;
+        }
+      }
+      
+      setImportError(errorMessage);
     }
   };
 
