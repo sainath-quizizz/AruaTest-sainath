@@ -1532,8 +1532,11 @@ export default function AuraStudio() {
       // Extract the aura config - handle both direct config and nested API response
       let config;
       if (parsed.data && parsed.data.value && parsed.data.value.output) {
-        // Nested API response format
+        // Nested API response format: data.value.output
         config = parsed.data.value.output;
+      } else if (parsed.data && parsed.data.output) {
+        // API response format: data.output
+        config = parsed.data.output;
       } else if (parsed.output) {
         // Wrapped in output
         config = parsed.output;
