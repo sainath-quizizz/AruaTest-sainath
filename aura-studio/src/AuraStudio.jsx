@@ -1,1962 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Camera,
-  Loader2,
-  Sparkles,
-  ImagePlus,
-  Wand2,
-  X,
-  Flame,
-  Wind,
-  Zap,
-  Flower2,
-  Sliders
-} from 'lucide-react';
-
-const AURA_TYPES = {
-  NONE: 'none',
-  FIRE: 'fire',
-  WIND: 'wind',
-  ELECTRIC: 'electric',
-  COSMIC: 'cosmic',
-  SAKURA: 'sakura',
-  CUSTOM: 'custom'
-};
-
-const AURA_COLORS = {
-  [AURA_TYPES.NONE]: 'rgba(0,0,0,0)',
-  [AURA_TYPES.FIRE]: '#ff5500',
-  [AURA_TYPES.WIND]: '#00ffcc',
-  [AURA_TYPES.ELECTRIC]: '#aa00ff',
-  [AURA_TYPES.COSMIC]: '#6366f1',
-  [AURA_TYPES.SAKURA]: '#ff9ec8',
-  [AURA_TYPES.CUSTOM]: '#ffffff'
-};
-
-const random = (min, max) => Math.random() * (max - min) + min;
-
-const OUTER_SHAPE_PRESETS = {
-  [AURA_TYPES.FIRE]: {
-    baseColor: '#FF4500',
-    tipColor: '#FFD700',
-    speed: 1.2,
-    jaggedness: 0.7,
-    smoothness: 0.25,
-    height: 1.2,
-    thickness: 0.7,
-    dualLayer: false,
-    intensity: 1.1,
-    contourStyle: 'flame',
-  },
-  [AURA_TYPES.WIND]: {
-    baseColor: '#22D3EE',
-    tipColor: '#A5F3FC',
-    speed: 0.8,
-    jaggedness: 0.35,
-    smoothness: 0.7,
-    height: 0.8,
-    thickness: 0.7,
-    dualLayer: false,
-    intensity: 0.85,
-  },
-  [AURA_TYPES.ELECTRIC]: {
-    baseColor: '#FFD700',
-    tipColor: '#FFFFFF',
-    speed: 1.5,
-    jaggedness: 0.9,
-    smoothness: 0.1,
-    height: 1.1,
-    thickness: 0.6,
-    dualLayer: false,
-    intensity: 1.3,
-  },
-  [AURA_TYPES.COSMIC]: {
-    baseColor: '#8B00FF',
-    tipColor: '#FF00FF',
-    speed: 1.0,
-    jaggedness: 0.8,
-    smoothness: 0.15,
-    height: 1.3,
-    thickness: 0.8,
-    dualLayer: true,
-    dualColor: '#1A0030',
-    intensity: 1.2,
-  },
-  [AURA_TYPES.SAKURA]: {
-    baseColor: '#FB7185',
-    tipColor: '#FECDD3',
-    speed: 0.6,
-    jaggedness: 0.3,
-    smoothness: 0.8,
-    height: 0.7,
-    thickness: 0.6,
-    dualLayer: false,
-    intensity: 0.8,
-  },
-};
-
-const SHAPE_PRESETS = {
-  flame: {
-    name: 'Flame',
-    icon: '🔥',
-    config: {
-      baseColor: '#FFD700',
-      tipColor: '#FF8C00',
-      speed: 1.4,
-      jaggedness: 0.7,
-      smoothness: 0.25,
-      height: 1.2,
-      thickness: 0.7,
-      dualLayer: false,
-      intensity: 1.1,
-      contourStyle: 'flame',
-    },
-  },
-  shadow: {
-    name: 'Shadow',
-    icon: '👤',
-    config: {
-      baseColor: '#6366F1',
-      tipColor: '#3B82F6',
-      speed: 0.9,
-      jaggedness: 0.8,
-      smoothness: 0.15,
-      height: 1.3,
-      thickness: 0.8,
-      dualLayer: true,
-      dualColor: '#1A0030',
-      intensity: 1.2,
-    },
-  },
-  blaze: {
-    name: 'Blaze',
-    icon: '🔷',
-    config: {
-      baseColor: '#60A5FA',
-      tipColor: '#38BDF8',
-      speed: 1.3,
-      jaggedness: 0.6,
-      smoothness: 0.3,
-      height: 1.1,
-      thickness: 0.65,
-      dualLayer: false,
-      intensity: 1.0,
-    },
-  },
-  burst: {
-    name: 'Burst',
-    icon: '💥',
-    config: {
-      baseColor: '#EF4444',
-      tipColor: '#F97316',
-      speed: 1.6,
-      jaggedness: 0.9,
-      smoothness: 0.1,
-      height: 1.0,
-      thickness: 0.6,
-      dualLayer: false,
-      intensity: 1.3,
-    },
-  },
-};
-
-const TAU = Math.PI * 2;
-const MAX_FLAME_POINTS = 48;
-const LUT_SIZE = 360;
-
-function extractSilhouette(imageSrc, canvasW = 600, canvasH = 700) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const cx = canvasW / 2;
-      const cy = canvasH * 0.55;
-      const offscreen = document.createElement('canvas');
-      offscreen.width = canvasW;
-      offscreen.height = canvasH;
-      const ctx = offscreen.getContext('2d');
-
-      const targetH = canvasH * 0.64;
-      const scale = targetH / img.naturalHeight;
-      const drawW = img.naturalWidth * scale;
-      const drawH = targetH;
-      ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
-
-      const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
-      const pixels = imageData.data;
-      const radii = new Float32Array(LUT_SIZE);
-      const maxRay = Math.max(canvasW, canvasH);
-
-      for (let deg = 0; deg < LUT_SIZE; deg++) {
-        const angle = (deg / LUT_SIZE) * TAU;
-        const dirX = Math.cos(angle);
-        const dirY = Math.sin(angle);
-        let furthest = 20;
-
-        for (let step = 1; step < maxRay; step++) {
-          const px = Math.round(cx + dirX * step);
-          const py = Math.round(cy + dirY * step);
-          if (px < 0 || px >= canvasW || py < 0 || py >= canvasH) break;
-          const alpha = pixels[(py * canvasW + px) * 4 + 3];
-          if (alpha > 10) furthest = step;
-        }
-        radii[deg] = furthest;
-      }
-
-      const smoothed = new Float32Array(LUT_SIZE);
-      for (let i = 0; i < LUT_SIZE; i++) {
-        const prev = radii[(i - 1 + LUT_SIZE) % LUT_SIZE];
-        const curr = radii[i];
-        const next = radii[(i + 1) % LUT_SIZE];
-        smoothed[i] = prev * 0.2 + curr * 0.6 + next * 0.2;
-      }
-
-      resolve(smoothed);
-    };
-    img.onerror = () => resolve(null);
-    img.src = imageSrc;
-  });
-}
-
-class FlameContourRenderer {
-  constructor(canvasWidth, canvasHeight) {
-    this.w = canvasWidth;
-    this.h = canvasHeight;
-    this.cx = canvasWidth / 2;
-    this.cy = canvasHeight * 0.55;
-    this.time = 0;
-    this.config = null;
-    this.outerGrad = null;
-
-    this.sinLUT = new Float32Array(LUT_SIZE);
-    this.cosLUT = new Float32Array(LUT_SIZE);
-    for (let i = 0; i < LUT_SIZE; i++) {
-      const a = (i / LUT_SIZE) * TAU;
-      this.sinLUT[i] = Math.sin(a);
-      this.cosLUT[i] = Math.cos(a);
-    }
-
-    this.flameOffsets = [];
-    this.flameSpeeds = [];
-    for (let i = 0; i < MAX_FLAME_POINTS; i++) {
-      this.flameOffsets.push(Math.random() * 1000);
-      this.flameSpeeds.push(0.6 + Math.random() * 0.8);
-    }
-
-    this.bolts = [];
-    this.boltTimer = 0;
-    this.boltInterval = 0.08 + Math.random() * 0.12;
-
-    this.streaks = [];
-    this.streakTimer = 0;
-
-    this.silhouetteRadii = null;
-  }
-
-  setSilhouette(radii) {
-    this.silhouetteRadii = radii;
-  }
-
-  sin(deg) {
-    return this.sinLUT[((deg % 360) + 360) % 360 | 0];
-  }
-
-  cos(deg) {
-    return this.cosLUT[((deg % 360) + 360) % 360 | 0];
-  }
-
-  setConfig(config) {
-    this.config = config;
-    this.outerGrad = null;
-  }
-
-  update(dt) {
-    if (!this.config) return;
-    this.time += dt * (this.config.speed || 1);
-    const isSoft = (this.config.smoothness || 0) > 0.5;
-    if (isSoft) {
-      this._updateStreaks(dt);
-    } else {
-      this._updateBolts(dt);
-    }
-  }
-
-  resize(w, h) {
-    this.w = w;
-    this.h = h;
-    this.cx = w / 2;
-    this.cy = h * 0.55;
-    this.outerGrad = null;
-  }
-
-  _constrainPoints(points) {
-    const maxUp = this.h * 0.42;
-    const maxDown = this.h * 0.42;
-    let upScale = 1.0;
-    let downScale = 1.0;
-
-    for (const p of points) {
-      const dy = p.y - this.cy;
-      if (dy < 0 && -dy > maxUp) {
-        upScale = Math.min(upScale, maxUp / (-dy));
-      } else if (dy > 0 && dy > maxDown) {
-        downScale = Math.min(downScale, maxDown / dy);
-      }
-    }
-
-    if (upScale < 1.0 || downScale < 1.0) {
-      for (const p of points) {
-        const dy = p.y - this.cy;
-        if (dy < 0) {
-          p.y = this.cy + dy * upScale;
-        } else {
-          p.y = this.cy + dy * downScale;
-        }
-      }
-    }
-
-    return points;
-  }
-
-  _buildOrganicFlamePoints(scaleMul) {
-    const f = this.config;
-    const intensity = f.intensity || 1.0;
-    const baseW = this.w * 0.183 * scaleMul;
-    const topH = this.h * 0.383 * scaleMul;
-    const botH = this.h * 0.16 * scaleMul;
-    const modW = 0.95 + (f.thickness || 0.6) * 0.5 * intensity;
-    const modTop = 0.8 + (f.height || 1.0) * 0.15 * intensity;
-    const modBot = 0.9 + intensity * 0.1;
-    const t = this.time;
-    const jagged = f.jaggedness || 0.5;
-
-    const points = [];
-    for (let i = 0; i < MAX_FLAME_POINTS; i++) {
-      const frac = i / MAX_FLAME_POINTS;
-      const angle = frac * TAU;
-      const degIdx = (frac * 360) | 0;
-
-      const cosA = this.cos(degIdx);
-      const sinA = this.sin(degIdx);
-      const isTop = sinA < 0;
-      const absSin = Math.abs(sinA);
-
-      const dirScale = isTop ? 0.4 + absSin * 0.6 : 0.15;
-
-      const tongueA = Math.sin(angle * 6 + t * 2.2 + this.flameOffsets[0]);
-      const tongueB = Math.sin(angle * 11 + t * 3.8 + this.flameOffsets[1]) * 0.4;
-      const tongueC = Math.sin(angle * 3 + t * 1.3 + this.flameOffsets[2]) * 0.3;
-      const rawTongue = tongueA + tongueB + tongueC;
-      const tongueAmp = (0.45 + Math.max(0, rawTongue) * 0.85) * jagged * 0.45 * dirScale;
-
-      const n1 = Math.sin(t * 1.5 + this.flameOffsets[i] + angle * 2.5) * 0.12 * dirScale;
-      const n2 = Math.sin(t * 2.8 + this.flameOffsets[i] * 1.5 + angle * 4) * 0.06 * dirScale;
-      const noise = n1 + n2;
-
-      const flameMod = 1.0 + tongueAmp + noise;
-
-      const horizTaper = isTop
-        ? 1.0 - Math.pow(absSin, 1.8) * 0.45
-        : 1.0 - Math.pow(sinA, 4) * 0.25;
-      const rx = baseW * modW * flameMod * horizTaper;
-      const ry = (isTop ? topH * modTop : botH * modBot) * flameMod;
-
-      points.push({
-        x: this.cx + cosA * rx,
-        y: this.cy + sinA * ry,
-      });
-    }
-    return points;
-  }
-
-  buildFlamePoints(scaleMul) {
-    const f = this.config;
-    if (!f) return [];
-
-    if (f.contourStyle === 'flame') {
-      return this._buildOrganicFlamePoints(scaleMul);
-    }
-
-    const intensity = f.intensity || 1.0;
-    const baseW = this.w * 0.183 * scaleMul;
-    const topH = this.h * 0.383 * scaleMul;
-    const botH = this.h * 0.16 * scaleMul;
-    const modW = 0.95 + (f.thickness || 0.6) * 0.5 * intensity;
-    const modTop = 0.8 + (f.height || 1.0) * 0.15 * intensity;
-    const modBot = 0.9 + intensity * 0.1;
-    const t = this.time;
-    const jagged = f.jaggedness || 0.5;
-
-    const points = [];
-    for (let i = 0; i < MAX_FLAME_POINTS; i++) {
-      const frac = i / MAX_FLAME_POINTS;
-      const angle = frac * TAU;
-      const degIdx = (frac * 360) | 0;
-
-      const cosA = this.cos(degIdx);
-      const sinA = this.sin(degIdx);
-      const isTop = sinA < 0;
-      const absSin = Math.abs(sinA);
-
-      const dirScale = isTop ? 0.4 + absSin * 0.6 : 0.15;
-
-      const isSpike = i % 2 === 0;
-      const rawSpike = isSpike
-        ? jagged * (0.4 + 0.35 * Math.sin(t * 3.2 + this.flameOffsets[i]))
-        : -jagged * (0.15 + 0.1 * Math.sin(t * 2.8 + this.flameOffsets[i] * 1.3));
-      const spikeAmp = 1.0 + rawSpike * dirScale;
-
-      const n1 = Math.sin(t * 2.5 + this.flameOffsets[i] + angle * 4) * 0.2 * dirScale;
-      const n2 = Math.sin(t * 5.0 + this.flameOffsets[i] * 2.1 + angle * 7) * 0.12 * jagged * dirScale;
-      const noise = n1 + n2;
-
-      const horizTaper = isTop
-        ? 1.0 - Math.pow(absSin, 1.8) * 0.45
-        : 1.0 - Math.pow(sinA, 4) * 0.25;
-      const rx = baseW * modW * spikeAmp * (1 + noise * 0.3) * horizTaper;
-      const ry = (isTop ? topH * modTop : botH * modBot) * spikeAmp * (1 + noise * 0.3);
-
-      points.push({
-        x: this.cx + cosA * rx,
-        y: this.cy + sinA * ry,
-      });
-    }
-    return points;
-  }
-
-  buildFlamePath(ctx, points) {
-    const len = points.length;
-    const s = this.config?.smoothness ?? 0.2;
-    const isFlameStyle = this.config?.contourStyle === 'flame';
-
-    ctx.beginPath();
-
-    if (!isFlameStyle && s < 0.15) {
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < len; i++) ctx.lineTo(points[i].x, points[i].y);
-    } else if (isFlameStyle || s > 0.5) {
-      const first = points[0], second = points[1];
-      ctx.moveTo((first.x + second.x) / 2, (first.y + second.y) / 2);
-      for (let i = 1; i < len; i++) {
-        const curr = points[i];
-        const next = points[(i + 1) % len];
-        ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) / 2, (curr.y + next.y) / 2);
-      }
-    } else {
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < len; i++) {
-        const curr = points[i];
-        const isValley = i % 2 !== 0;
-        if (isValley && (this.flameOffsets[i % MAX_FLAME_POINTS] % 1) > (1.0 - s)) {
-          const next = points[(i + 1) % len];
-          ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) / 2, (curr.y + next.y) / 2);
-        } else {
-          ctx.lineTo(curr.x, curr.y);
-        }
-      }
-    }
-
-    ctx.closePath();
-  }
-
-  drawOuterGlow(ctx) {
-    if (!this.config) return;
-    const baseColor = this.config.baseColor || '#FF6600';
-    const intensity = this.config.intensity || 1.0;
-    const pulse = 0.85 + 0.15 * Math.sin(this.time * 1.5);
-    const r = Math.max(this.w, this.h) * 0.8 * intensity;
-
-    if (!this.outerGrad) {
-      this.outerGrad = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, r);
-      this.outerGrad.addColorStop(0, baseColor + '00');
-      this.outerGrad.addColorStop(0.35, baseColor + '00');
-      this.outerGrad.addColorStop(0.55, baseColor + '11');
-      this.outerGrad.addColorStop(0.70, baseColor + '55');
-      this.outerGrad.addColorStop(0.82, baseColor + '88');
-      this.outerGrad.addColorStop(0.93, baseColor + '33');
-      this.outerGrad.addColorStop(1, baseColor + '00');
-    }
-
-    ctx.save();
-    ctx.globalAlpha = 0.5 * pulse;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = this.outerGrad;
-    ctx.fillRect(0, 0, this.w, this.h);
-    ctx.restore();
-  }
-
-  drawFlameBand(ctx, outerPts, innerPts, baseColor, tipColor) {
-    if (outerPts.length < 3) return;
-    const intensity = this.config?.intensity || 1.0;
-
-    ctx.save();
-
-    this.buildFlamePath(ctx, outerPts);
-    ctx.clip();
-
-    const phase = this.time * 1.8;
-    const bandR = Math.max(this.w, this.h) * 0.45 * intensity;
-    const grad = ctx.createRadialGradient(this.cx, this.cy, bandR * 0.2, this.cx, this.cy, bandR);
-
-    const pulseA = 0.5 + 0.45 * Math.sin(phase);
-    const pulseB = 0.5 + 0.45 * Math.sin(phase + 2.1);
-    const alphaA = Math.round(pulseA * 200).toString(16).padStart(2, '0');
-    const alphaB = Math.round(pulseB * 180).toString(16).padStart(2, '0');
-
-    grad.addColorStop(0, baseColor + '00');
-    grad.addColorStop(0.15, baseColor + '00');
-    grad.addColorStop(0.35, baseColor + alphaA);
-    grad.addColorStop(0.55, tipColor + alphaB);
-    grad.addColorStop(0.72, tipColor + alphaA);
-    grad.addColorStop(0.88, baseColor + 'BB');
-    grad.addColorStop(1, baseColor + '55');
-
-    ctx.globalAlpha = 0.8;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, this.w, this.h);
-
-    ctx.globalCompositeOperation = 'destination-out';
-    this.buildFlamePath(ctx, innerPts);
-    ctx.globalAlpha = 0.95;
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  drawFlameShape(ctx, points, baseColor, tipColor, scale, baseAlpha) {
-    const len = points.length;
-    if (len < 3) return;
-    const intensity = this.config?.intensity || 1.0;
-    const sm = this.config?.smoothness ?? 0.2;
-
-    ctx.save();
-
-    if (scale !== 1.0) {
-      ctx.translate(this.cx, this.cy);
-      ctx.scale(scale, scale);
-      ctx.translate(-this.cx, -this.cy);
-    }
-
-    const flameR = Math.max(this.w, this.h) * 0.45 * intensity;
-    const hollowGrad = ctx.createRadialGradient(this.cx, this.cy, 0, this.cx, this.cy, flameR);
-    hollowGrad.addColorStop(0, baseColor + '00');
-    hollowGrad.addColorStop(0.35, baseColor + '00');
-    hollowGrad.addColorStop(0.50, baseColor + '06');
-    hollowGrad.addColorStop(0.60, baseColor + '18');
-    hollowGrad.addColorStop(0.70, baseColor + '55');
-    hollowGrad.addColorStop(0.80, baseColor + '99');
-    hollowGrad.addColorStop(0.88, tipColor + 'CC');
-    hollowGrad.addColorStop(0.95, tipColor + 'EE');
-    hollowGrad.addColorStop(1, tipColor + 'DD');
-
-    ctx.globalAlpha *= baseAlpha;
-
-    this.buildFlamePath(ctx, points);
-    ctx.fillStyle = hollowGrad;
-    ctx.shadowColor = baseColor;
-    ctx.shadowBlur = 35 * intensity;
-    ctx.fill();
-
-    this.buildFlamePath(ctx, points);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.shadowBlur = 70;
-    ctx.shadowColor = baseColor;
-    ctx.strokeStyle = baseColor + '33';
-    ctx.lineWidth = 12;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-
-    this.buildFlamePath(ctx, points);
-    ctx.shadowBlur = 40;
-    ctx.shadowColor = tipColor;
-    ctx.strokeStyle = tipColor + '55';
-    ctx.lineWidth = 7;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-
-    ctx.globalCompositeOperation = 'source-over';
-    this.buildFlamePath(ctx, points);
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = tipColor;
-    ctx.strokeStyle = tipColor + 'CC';
-    ctx.lineWidth = 2.5;
-    ctx.lineJoin = sm > 0.5 ? 'round' : 'miter';
-    ctx.miterLimit = 12;
-    ctx.stroke();
-
-    this.buildFlamePath(ctx, points);
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = '#FFFFFF';
-    ctx.strokeStyle = '#FFFFFF77';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  drawFlameInnerBorder(ctx, pts, baseColor, tipColor) {
-    if (pts.length < 3) return;
-    const sm = this.config?.smoothness ?? 0.2;
-
-    ctx.save();
-    this.buildFlamePath(ctx, pts);
-
-    const pulse = 0.5 + 0.35 * Math.sin(this.time * 2.0);
-    ctx.globalAlpha = pulse;
-    ctx.strokeStyle = tipColor + 'BB';
-    ctx.shadowColor = baseColor;
-    ctx.shadowBlur = 18;
-    ctx.lineWidth = 2;
-    ctx.lineJoin = sm > 0.5 ? 'round' : 'miter';
-    ctx.miterLimit = 10;
-    ctx.stroke();
-
-    this.buildFlamePath(ctx, pts);
-    ctx.shadowBlur = 6;
-    ctx.shadowColor = '#FFFFFF';
-    ctx.strokeStyle = '#FFFFFF44';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  drawEdgeFade(ctx) {
-    const rx = this.w * 0.55;
-    const ry = this.h * 0.65;
-    const fadeCy = this.h * 0.5;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-in';
-    const grad = ctx.createRadialGradient(this.cx, fadeCy, 0, this.cx, fadeCy, Math.max(rx, ry));
-    grad.addColorStop(0, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.82, 'rgba(0,0,0,1)');
-    grad.addColorStop(0.94, 'rgba(0,0,0,0.3)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.ellipse(this.cx, fadeCy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  _spawnBolt() {
-    const f = this.config;
-    if (!f) return;
-    const intensity = f.intensity || 1.0;
-
-    const angle = Math.random() * TAU;
-    const cosA = Math.cos(angle);
-    const sinA = Math.sin(angle);
-    const rFrac = 0.3 + Math.random() * 0.5;
-
-    let startX, startY;
-    if (this.silhouetteRadii) {
-      const degIdx = Math.round((angle / TAU) * 360) % 360;
-      const silR = this.silhouetteRadii[degIdx];
-      startX = this.cx + cosA * silR * rFrac;
-      startY = this.cy + sinA * silR * rFrac;
-    } else {
-      const baseW = this.w * 0.18 * (f.thickness || 0.6) * intensity;
-      const baseH = this.h * 0.22 * intensity;
-      startX = this.cx + cosA * baseW * rFrac;
-      startY = this.cy + sinA * baseH * rFrac;
-    }
-
-    const boltAngle = angle + (Math.random() - 0.5) * 1.2;
-    const boltLen = (30 + Math.random() * 60) * intensity;
-    const segments = 4 + Math.floor(Math.random() * 5);
-    const pts = [{ x: startX, y: startY }];
-
-    for (let i = 1; i <= segments; i++) {
-      const frac = i / segments;
-      const baseX = startX + Math.cos(boltAngle) * boltLen * frac;
-      const baseY = startY + Math.sin(boltAngle) * boltLen * frac;
-      const perpX = -Math.sin(boltAngle);
-      const perpY = Math.cos(boltAngle);
-      const jitter = (Math.random() - 0.5) * boltLen * 0.35;
-      pts.push({
-        x: baseX + perpX * jitter,
-        y: baseY + perpY * jitter,
-      });
-    }
-
-    const hasBranch = Math.random() < 0.4;
-    let branch = null;
-    if (hasBranch && pts.length > 2) {
-      const brIdx = 1 + Math.floor(Math.random() * (pts.length - 2));
-      const brAngle = boltAngle + (Math.random() - 0.5) * 1.8;
-      const brLen = boltLen * (0.25 + Math.random() * 0.3);
-      const brSegs = 2 + Math.floor(Math.random() * 2);
-      const brPts = [{ x: pts[brIdx].x, y: pts[brIdx].y }];
-      for (let j = 1; j <= brSegs; j++) {
-        const fr = j / brSegs;
-        const bx = pts[brIdx].x + Math.cos(brAngle) * brLen * fr;
-        const by = pts[brIdx].y + Math.sin(brAngle) * brLen * fr;
-        const px = -Math.sin(brAngle);
-        const py = Math.cos(brAngle);
-        const jit = (Math.random() - 0.5) * brLen * 0.4;
-        brPts.push({ x: bx + px * jit, y: by + py * jit });
-      }
-      branch = brPts;
-    }
-
-    return {
-      points: pts,
-      branch,
-      life: 1.0,
-      maxLife: 0.08 + Math.random() * 0.14,
-      width: 1.0 + Math.random() * 1.5,
-    };
-  }
-
-  _updateBolts(dt) {
-    if (!this.config) return;
-
-    this.boltTimer += dt;
-    if (this.boltTimer >= this.boltInterval) {
-      this.boltTimer = 0;
-      this.boltInterval = 0.06 + Math.random() * 0.15;
-      const count = Math.random() < 0.3 ? 2 : 1;
-      for (let i = 0; i < count; i++) {
-        const bolt = this._spawnBolt();
-        if (bolt) this.bolts.push(bolt);
-      }
-    }
-
-    for (let i = this.bolts.length - 1; i >= 0; i--) {
-      const b = this.bolts[i];
-      b.life -= dt / b.maxLife;
-      if (b.life <= 0) {
-        this.bolts.splice(i, 1);
-      }
-    }
-  }
-
-  _drawBoltPath(ctx, pts, alpha, width, color, glowColor) {
-    if (pts.length < 2) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 18;
-    ctx.strokeStyle = glowColor;
-    ctx.lineWidth = width + 3;
-    ctx.lineJoin = 'bevel';
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
-
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = color;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = Math.max(0.5, width * 0.4);
-    ctx.globalAlpha = alpha * 0.9;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  _updateStreaks(dt) {
-    if (!this.config) return;
-    this.streakTimer += dt;
-    if (this.streakTimer >= 0.08 + Math.random() * 0.14) {
-      this.streakTimer = 0;
-      const angle = -Math.PI * 0.5 + (Math.random() - 0.5) * Math.PI * 1.4;
-      const startR = this.w * 0.04 + Math.random() * this.w * 0.06;
-      const len = this.w * 0.18 + Math.random() * this.w * 0.28;
-      this.streaks.push({
-        ox: this.cx + Math.cos(angle) * startR,
-        oy: this.cy + Math.sin(angle) * startR,
-        dx: Math.cos(angle),
-        dy: Math.sin(angle),
-        len,
-        progress: 0,
-        speed: 1.2 + Math.random() * 1.6,
-        tailLen: 0.45 + Math.random() * 0.25,
-        width: 0.6 + Math.random() * 1.2,
-        alive: true,
-      });
-    }
-    for (let i = this.streaks.length - 1; i >= 0; i--) {
-      const s = this.streaks[i];
-      s.progress += dt * s.speed;
-      if (s.progress > 1.0 + s.tailLen) {
-        this.streaks.splice(i, 1);
-      }
-    }
-  }
-
-  drawStreaks(ctx) {
-    if (!this.config || this.streaks.length === 0) return;
-    const baseColor = this.config.tipColor || this.config.baseColor || '#FFFFFF';
-    const glowColor = this.config.baseColor || '#FFAACC';
-
-    for (const s of this.streaks) {
-      const headT = Math.min(s.progress, 1.0);
-      const tailT = Math.max(0, s.progress - s.tailLen);
-      const headX = s.ox + s.dx * s.len * headT;
-      const headY = s.oy + s.dy * s.len * headT;
-      const tailX = s.ox + s.dx * s.len * tailT;
-      const tailY = s.oy + s.dy * s.len * tailT;
-
-      const fadeOut = s.progress > 1.0 ? 1.0 - (s.progress - 1.0) / s.tailLen : 1.0;
-      const alpha = Math.max(0, fadeOut) * 0.55;
-      if (alpha <= 0) continue;
-
-      const grad = ctx.createLinearGradient(tailX, tailY, headX, headY);
-      grad.addColorStop(0, glowColor + '00');
-      grad.addColorStop(0.5, glowColor + '66');
-      grad.addColorStop(1, baseColor + 'FF');
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = alpha;
-
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 15;
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = s.width + 2;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(tailX, tailY);
-      ctx.lineTo(headX, headY);
-      ctx.stroke();
-
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = Math.max(0.5, s.width * 0.4);
-      ctx.globalAlpha = alpha * 0.9;
-      ctx.beginPath();
-      ctx.moveTo(tailX, tailY);
-      ctx.lineTo(headX, headY);
-      ctx.stroke();
-
-      ctx.shadowColor = '#FFFFFF';
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(headX, headY, s.width * 0.8, 0, TAU);
-      ctx.fill();
-
-      ctx.restore();
-    }
-  }
-
-  drawBolts(ctx) {
-    if (!this.config || this.bolts.length === 0) return;
-    const baseColor = this.config.tipColor || this.config.baseColor || '#FFFFFF';
-    const glowColor = this.config.baseColor || '#FFDD00';
-
-    for (const bolt of this.bolts) {
-      const alpha = Math.pow(bolt.life, 0.5);
-      this._drawBoltPath(ctx, bolt.points, alpha, bolt.width, baseColor, glowColor);
-      if (bolt.branch) {
-        this._drawBoltPath(ctx, bolt.branch, alpha * 0.7, bolt.width * 0.6, baseColor, glowColor);
-      }
-    }
-  }
-
-  drawAuraOnly(ctx) {
-    if (!this.config) return;
-
-    const f = this.config;
-    const baseColor = f.baseColor || '#FF6600';
-    const tipColor = f.tipColor || '#FFDD00';
-
-    const outerPts = this.buildFlamePoints(1.0);
-    const innerPts = this.buildFlamePoints(0.6);
-
-    for (let i = 0; i < innerPts.length && i < outerPts.length; i++) {
-      const dy = innerPts[i].y - this.cy;
-      if (dy > 0) {
-        const blend = Math.min(1, dy / (this.h * 0.15)) * 0.88;
-        innerPts[i].x += (outerPts[i].x - innerPts[i].x) * blend;
-        innerPts[i].y += (outerPts[i].y - innerPts[i].y) * blend;
-      }
-    }
-
-    this.drawFlameBand(ctx, outerPts, innerPts, baseColor, tipColor);
-
-    if (f.dualLayer && f.dualColor) {
-      this.drawFlameShape(ctx, outerPts, f.dualColor, baseColor, 1.15, 0.35);
-    }
-
-    this.drawFlameShape(ctx, outerPts, baseColor, tipColor, 1.0, 0.8);
-
-    this.drawFlameInnerBorder(ctx, innerPts, baseColor, tipColor);
-  }
-
-  drawLowerBodyGlow(ctx) {
-    if (!this.config) return;
-    const baseColor = this.config.baseColor || '#FF6600';
-    const r = parseInt(baseColor.slice(1, 3), 16) || 0;
-    const g = parseInt(baseColor.slice(3, 5), 16) || 0;
-    const b = parseInt(baseColor.slice(5, 7), 16) || 0;
-
-    const pulse = 0.6 + 0.4 * Math.sin(this.time * 1.2);
-    const glowW = this.w * 0.35;
-    const glowH = this.h * 0.28;
-    const glowCy = this.cy + this.h * 0.12;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.18 * pulse;
-
-    const grad = ctx.createRadialGradient(this.cx, glowCy, 0, this.cx, glowCy, Math.max(glowW, glowH));
-    grad.addColorStop(0, `rgba(${r},${g},${b},0.35)`);
-    grad.addColorStop(0.3, `rgba(${r},${g},${b},0.2)`);
-    grad.addColorStop(0.6, `rgba(${r},${g},${b},0.08)`);
-    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.ellipse(this.cx, glowCy, glowW, glowH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  drawBoltsAndGlow(ctx) {
-    if (!this.config) return;
-    const isSoft = (this.config.smoothness || 0) > 0.5;
-    if (isSoft) {
-      this.drawStreaks(ctx);
-    } else {
-      this.drawBolts(ctx);
-    }
-    this.drawLowerBodyGlow(ctx);
-  }
-
-  draw(ctx) {
-    if (!this.config) return;
-    this.drawAuraOnly(ctx);
-    this.drawBolts(ctx);
-  }
-}
-
-const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
-const PORTKEY_URL = 'https://api.portkey.ai/v1/chat/completions';
-// for flash - use this model
-// const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
-// const PORTKEY_MODEL = '@vertex-global-region/gemini-3-pro-preview';
-// const PORTKEY_MODEL = '@content-rnd-gem-565e6c/gemini-2.5-flash-lite';
-// const PORTKEY_MODEL = '@content-rnd-gem-565e6c/gemini-2.5-flash';
-
-async function callLLMText(promptText) {
-  const key = "7uuFM238TMkz2A0I+VvMfoZVm9l+"
-  if (key && !localStorage.getItem('portkey_api_key')) localStorage.setItem('portkey_api_key', key);
-  if (!key) throw new Error('No API key provided. Set it via: localStorage.setItem("portkey_api_key", "your-key")');
-
-  const response = await fetch(PORTKEY_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-portkey-api-key': key,
-      'x-portkey-provider': 'openai',
-    },
-    body: JSON.stringify({
-      model: PORTKEY_MODEL,
-      max_tokens: 32384,
-      temperature: 0,
-      messages: [{ role: 'user', content: promptText }]
-    })
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    console.error("Portkey API Error:", response.status, errorBody);
-    throw new Error(`API Error ${response.status}: ${errorBody}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
-class Particle {
-  constructor(type, canvasWidth, canvasHeight, customConfig = null) {
-    this.type = type;
-    this.w = canvasWidth;
-    this.h = canvasHeight;
-    this.customConfig = customConfig;
-    this.variant = Math.random();
-    this.reset(true);
-  }
-
-  reset() {
-    const centerX = this.w / 2;
-    const feetY = this.h * 0.58;
-
-    if (this.type === AURA_TYPES.CUSTOM && this.customConfig) {
-      const entities = this.customConfig.entities;
-      if (entities && entities.length > 0) {
-        const totalWeight = entities.reduce((sum, e) => sum + (e.weight || 1), 0);
-        let rand = Math.random() * totalWeight;
-        this.entity = entities[0];
-        for (const e of entities) {
-          rand -= (e.weight || 1);
-          if (rand <= 0) { 
-            this.entity = e; 
-            break; 
-          }
-        }
-
-        const sizeRange = this.entity.size || [12, 18];
-        this.size = random(sizeRange[0], sizeRange[1]);
-
-        const sp = this.entity.speed || {};
-        const vxRange = sp.vx || [-1, 1];
-        const vyRange = sp.vy || [-2, -0.5];
-        this.vx = random(vxRange[0], vxRange[1]);
-        this.vy = random(vyRange[0], vyRange[1]);
-
-        const mov = this.entity.movement;
-        const movType = typeof mov === 'string' ? mov : null;
-        if (movType) {
-          const downwardTypes = ['rain', 'bounce', 'gravity'];
-          if (!downwardTypes.includes(movType) && this.vy > 0) {
-            this.vy = -Math.abs(this.vy);
-          }
-        }
-
-        // Rain: spawn at top of canvas, fall downward across full width
-        if (movType === 'rain') {
-          this.x = random(0, this.w);
-          this.y = random(-40, -5);
-          this.vy = Math.abs(this.vy) || random(2, 5);
-          this.rotation = random(-0.1, 0.1);
-          this.rotSpeed = random(-0.005, 0.005);
-          this.life = 1;
-          this.decay = random(0.003, 0.008);
-        // Fluid mode: spawn from bottom NARROW, slower decay for smooth blending
-        } else if (this.customConfig.renderMode === 'fluid') {
-          // Start NARROW at the bottom (like real smoke from a source)
-          this.x = centerX + random(-30, 30); // Much narrower spawn area
-          this.y = feetY + random(30, 50); // Spawn at bottom
-          this.rotation = random(-0.3, 0.3);
-          this.rotSpeed = random(-0.01, 0.01); // Slower rotation for fluid
-          this.life = 1;
-          this.decay = random(0.004, 0.009); // Slower decay for smooth fade
-        } else {
-          this.x = centerX + random(-110, 110);
-          this.y = feetY + random(-30, 80);
-          this.rotation = random(-0.15, 0.15);
-          this.rotSpeed = random(-0.02, 0.02);
-          this.life = 1;
-          this.decay = random(0.005, 0.013);
-        }
-        
-        this.movementPhase = random(0, Math.PI * 2);
-      }
-    }
-
-    // --- PRESET AURA TYPES ---
-    switch (this.type) {
-      case AURA_TYPES.FIRE:
-        this.x = centerX + random(-60, 60);
-        this.y = feetY + random(-10, 40);
-        this.vx = (this.x - centerX) * 0.005 + random(-0.2, 0.2);
-        this.vy = random(-3.5, -1);
-        this.size = random(30, 70);
-        this.life = 1;
-        this.decay = random(0.008, 0.02);
-        this.hue = random(0, 35);
-        break;
-
-      case AURA_TYPES.WIND:
-        this.initialX = centerX;
-        this.y = feetY + random(20, 100);
-        this.vy = random(-3, -1.5);
-        this.amplitude = random(40, 90);
-        this.frequency = random(0.015, 0.03);
-        this.phase = random(0, Math.PI * 2);
-        this.x = this.initialX + Math.sin(this.y * this.frequency + this.phase) * this.amplitude;
-        this.size = random(20, 40);
-        this.life = 1;
-        this.decay = 0.008;
-        this.hue = random(150, 170);
-        break;
-
-      case AURA_TYPES.ELECTRIC: {
-        this.x = centerX + random(-80, 80);
-        this.y = feetY - random(0, 180);
-        this.points = [];
-        let curX = this.x;
-        let curY = this.y;
-        for (let i = 0; i < 5; i++) {
-          this.points.push({ x: curX, y: curY });
-          curX += random(-20, 20);
-          curY += random(-20, 20);
-        }
-        this.life = 1;
-        this.decay = random(0.02, 0.08);
-        this.size = random(1, 4);
-        this.hue = random(250, 280);
-        break;
-      }
-
-      case AURA_TYPES.COSMIC: {
-        this.isStar = false;
-        this.x = centerX;
-        this.y = this.h * 0.5;
-        const angle = random(0, Math.PI * 2);
-        const speed = random(3, 8);
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-        this.size = random(1, 3);
-        this.life = 1;
-        this.decay = random(0.01, 0.03);
-        this.hue = random(200, 320);
-        if (this.variant > 0.8) {
-          this.vx = 0;
-          this.vy = 0;
-          this.x = centerX + random(-150, 150);
-          this.y = this.h * 0.5 + random(-150, 150);
-          this.size = random(2, 5);
-          this.decay = random(0.005, 0.01);
-          this.isStar = true;
-        }
-        break;
-      }
-
-      case AURA_TYPES.SAKURA:
-        this.x = centerX + random(-100, 100);
-        this.y = feetY + 50;
-        this.vx = random(-1, 1);
-        this.vy = random(-3, -1);
-        this.size = random(4, 8);
-        this.rotation = random(0, 360);
-        this.rotSpeed = random(-5, 5);
-        this.life = 1;
-        this.decay = random(0.005, 0.015);
-        this.hue = random(330, 350);
-        break;
-
-      default:
-        break;
-    }
-  }
-
-  update() {
-    if (this.type === AURA_TYPES.CUSTOM && this.customConfig) {
-      const isFluidMode = this.customConfig.renderMode === 'fluid';
-
-      const speedMult = this.speedMultiplier || 1.0;
-      this.x += this.vx * speedMult;
-      this.y += this.vy * speedMult;
-      if (this.rotSpeed) this.rotation += this.rotSpeed;
-      this.movementPhase = (this.movementPhase || 0) + 0.08;
-
-      // Fluid mode enhancements: expand size and add turbulence (REAL SMOKE PHYSICS)
-      if (isFluidMode) {
-        const initialSize = (this.entity?.size?.[1] || 45);
-        const maxSize = initialSize * 4; // Cap at 4x initial size
-        
-        if (this.size < maxSize) {
-          const expansionRate = 1.012 + (1 - this.life) * 0.008;
-          this.size *= expansionRate;
-        }
-        
-        // Gentle horizontal drift (widens the plume)
-        const driftStrength = 0.05 + (1 - this.life) * 0.12;
-        this.vx += random(-driftStrength, driftStrength);
-        // Clamp horizontal velocity so it doesn't fly off screen
-        this.vx = Math.max(-2, Math.min(2, this.vx));
-        
-        // Deceleration as smoke rises
-        this.vy *= 0.994;
-      }
-
-      const movement = this.entity?.movement || 'float';
-      const centerX = this.w / 2;
-      const centerY = this.h * 0.58;
-
-      if (typeof movement === 'object') {
-        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-        const m = movement;
-
-        if (m.gravity) this.vy += clamp(m.gravity, -0.15, 0.15);
-
-        if (m.friction) {
-          const f = clamp(m.friction, 0.9, 1.0);
-          this.vx *= f;
-          this.vy *= f;
-        }
-
-        if (m.wave) {
-          const amp = clamp(m.wave.amp || 1, 0.1, 5);
-          const freq = clamp(m.wave.freq || 1, 0.1, 5);
-          const waveVal = Math.sin(this.movementPhase * freq) * amp;
-          if (m.wave.axis === 'y') this.y += waveVal;
-          else if (m.wave.axis === 'both') { 
-            this.x += waveVal; 
-            this.y += Math.cos(this.movementPhase * freq) * amp * 0.5; 
-          }
-          else this.x += waveVal;
-        }
-
-        if (m.attract) {
-          const a = clamp(m.attract, -0.01, 0.01);
-          this.vx += (centerX - this.x) * a;
-          this.vy += (centerY - this.y) * a;
-        }
-
-        if (m.spin) {
-          const sp = clamp(m.spin, -3, 3);
-          this.x += Math.cos(this.movementPhase * sp) * 1.5;
-          this.y += Math.sin(this.movementPhase * sp) * 1.5;
-        }
-
-        if (m.jitter) {
-          const j = clamp(m.jitter, 0, 0.5);
-          this.vx += random(-j, j);
-          this.vy += random(-j, j);
-        }
-
-        if (m.bounce) {
-          const floor = this.h * (clamp(m.bounce.floor || 0.75, 0.5, 0.9));
-          if (this.y > floor) {
-            this.y = floor;
-            this.vy *= -(clamp(m.bounce.elasticity || 0.6, 0.1, 0.9));
-          }
-        }
-
-        if (m.scale) {
-          this.size *= clamp(m.scale, 0.95, 1.05);
-        }
-
-        this.vx = clamp(this.vx, -8, 8);
-        this.vy = clamp(this.vy, -8, 8);
-
-      } else {
-        switch (movement) {
-          case 'float':
-            this.x += Math.sin(this.movementPhase) * 0.5;
-            break;
-          case 'zigzag':
-            this.x += Math.sin(this.movementPhase * 2.5) * 1.8;
-            break;
-          case 'orbit':
-            this.x += Math.sin(this.movementPhase) * 2;
-            this.y += Math.cos(this.movementPhase) * 0.5;
-            break;
-          case 'rise':
-            this.vy -= 0.01;
-            this.x += Math.sin(this.movementPhase * 0.8) * 0.3;
-            break;
-          case 'wander':
-            this.vx += random(-0.1, 0.1);
-            this.vy += random(-0.1, 0.1);
-            break;
-          case 'spiral': {
-            const spiralR = (1 - this.life) * 3;
-            this.x += Math.cos(this.movementPhase * 2) * spiralR;
-            this.y += Math.sin(this.movementPhase * 2) * spiralR;
-            break;
-          }
-          case 'rain':
-            this.x += Math.sin(this.movementPhase * 0.5) * 0.5;
-            this.vy += 0.08;
-            if (this.y > this.h + 20) {
-              this.reset();
-            }
-            break;
-          case 'explode':
-            this.vx *= 0.97;
-            this.vy *= 0.97;
-            break;
-          case 'swarm':
-            this.vx += (centerX - this.x) * 0.002;
-            this.vy += (centerY - this.y) * 0.002;
-            break;
-          case 'bounce':
-            this.vy += 0.08;
-            if (this.y > this.h * 0.75) {
-              this.y = this.h * 0.75;
-              this.vy *= -0.6;
-            }
-            break;
-          case 'pulse': {
-            const dx = this.x - centerX;
-            const dy = this.y - centerY;
-            const pulseScale = Math.sin(this.movementPhase * 2) * 0.02;
-            this.x += dx * pulseScale;
-            this.y += dy * pulseScale;
-            break;
-          }
-          case 'vortex': {
-            const vdx = centerX - this.x;
-            const vdy = centerY - this.y;
-            const dist = Math.sqrt(vdx * vdx + vdy * vdy) || 1;
-            this.vx += (vdy / dist) * 0.3;
-            this.vy += (-vdx / dist) * 0.3;
-            this.vx += vdx * 0.001;
-            this.vy += vdy * 0.001;
-            break;
-          }
-          case 'levitate': {
-            // Smooth upward float with gentle side-to-side oscillation (bubble-like)
-            this.vy -= 0.015;
-            this.x += Math.sin(this.movementPhase * 1.2) * 0.8;
-            this.vx *= 0.95;
-            break;
-          }
-          case 'fountain': {
-            // Parabolic arc - shoot upward then fall back down
-            this.vy += 0.06;
-            this.x += Math.sin(this.movementPhase * 0.5) * 0.2;
-            if (this.y > this.h * 0.8) {
-              this.vy = random(-3, -2);
-            }
-            break;
-          }
-          case 'wave': {
-            // Horizontal wave motion like water
-            const waveAmplitude = Math.sin(this.movementPhase * 1.5) * 2.5;
-            this.x += waveAmplitude;
-            this.y += Math.sin(this.movementPhase * 2) * 0.3;
-            break;
-          }
-          case 'tornado': {
-            // Strong upward spiral
-            const tornadoRadius = (this.h * 0.6 - this.y) * 0.15;
-            this.x += Math.cos(this.movementPhase * 3) * tornadoRadius * 0.2;
-            this.vx = Math.cos(this.movementPhase * 3) * 1.5;
-            this.vy -= 0.08;
-            break;
-          }
-          case 'drift': {
-            // Slow diagonal upward drift
-            this.vy -= 0.008;
-            this.vx += random(-0.05, 0.05);
-            this.x += Math.sin(this.movementPhase * 0.6) * 0.4;
-            break;
-          }
-          case 'flutter': {
-            // Erratic upward motion (butterfly-like)
-            this.vy -= random(0.01, 0.03);
-            this.vx += random(-0.3, 0.3);
-            this.x += Math.sin(this.movementPhase * 4) * random(0.5, 1.5);
-            this.y += Math.cos(this.movementPhase * 3) * random(0.2, 0.8);
-            this.vx *= 0.96;
-            break;
-          }
-          case 'whirlpool': {
-            // Inward spiral with downward pull
-            const wpdx = centerX - this.x;
-            const wpdy = centerY - this.y;
-            const wpdist = Math.sqrt(wpdx * wpdx + wpdy * wpdy) || 1;
-            this.vx += (wpdy / wpdist) * 0.25;
-            this.vy += (-wpdx / wpdist) * 0.25;
-            this.vx += wpdx * 0.003;
-            this.vy += wpdy * 0.003 + 0.02;
-            break;
-          }
-          case 'magnetic': {
-            // Alternating attract and repel from center
-            const mdx = centerX - this.x;
-            const mdy = centerY - this.y;
-            const magneticForce = Math.sin(this.movementPhase) * 0.05;
-            this.vx += mdx * magneticForce;
-            this.vy += mdy * magneticForce;
-            this.vx *= 0.98;
-            this.vy *= 0.98;
-            break;
-          }
-          case 'gravity': {
-            // Simple gravity fall
-            this.vy += 0.12;
-            this.vx *= 0.99;
-            if (this.y > this.h * 0.9) {
-              this.reset();
-            }
-            break;
-          }
-          case 'hover': {
-            // Stay near spawn point with gentle bobbing
-            if (!this.spawnX) this.spawnX = this.x;
-            if (!this.spawnY) this.spawnY = this.y;
-            const hoverDx = this.spawnX - this.x;
-            const hoverDy = this.spawnY - this.y;
-            this.vx += hoverDx * 0.01;
-            this.vy += hoverDy * 0.01 + Math.sin(this.movementPhase * 1.5) * 0.03;
-            this.vx *= 0.95;
-            this.vy *= 0.95;
-            break;
-          }
-        }
-      }
-
-      this.life -= this.decay;
-      if (this.life <= 0) this.reset();
-      return;
-    }
-
-    // --- PRESET AURA TYPES ---
-    const speedMult = this.speedMultiplier || 1.0;
-    switch (this.type) {
-      case AURA_TYPES.FIRE:
-        this.x += this.vx * speedMult;
-        this.y += this.vy * speedMult;
-        this.vx *= 0.99;
-        this.size *= 0.96;
-        this.life -= this.decay;
-        break;
-
-      case AURA_TYPES.WIND:
-        this.y += this.vy * speedMult;
-        this.x = this.initialX + Math.sin(this.y * this.frequency + this.phase) * this.amplitude;
-        this.life -= this.decay;
-        break;
-
-      case AURA_TYPES.ELECTRIC:
-        this.life -= this.decay;
-        if (Math.random() > 0.8) this.reset();
-        break;
-
-      case AURA_TYPES.COSMIC:
-        this.x += this.vx * speedMult;
-        this.y += this.vy * speedMult;
-        this.life -= this.decay;
-        break;
-
-      case AURA_TYPES.SAKURA:
-        this.y += this.vy * speedMult;
-        this.x += Math.sin(this.y * 0.05) * 0.5;
-        this.rotation += this.rotSpeed;
-        this.life -= this.decay;
-        break;
-    }
-
-    if (this.life <= 0) {
-      this.reset();
-    }
-  }
-
-  _drawShapes(ctx, s) {
-    for (const shape of this.entity.shapes) {
-      ctx.beginPath();
-      if (shape.fill) ctx.fillStyle = shape.fill;
-      if (shape.stroke) {
-        ctx.strokeStyle = shape.stroke;
-        ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
-      }
-
-      switch (shape.type) {
-        case 'circle':
-          ctx.beginPath();
-          ctx.arc((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.r || 0.1) * s, 0, Math.PI * 2);
-          if (shape.fill) ctx.fill();
-          if (shape.stroke) ctx.stroke();
-          break;
-        case 'ellipse':
-          ctx.beginPath();
-          ctx.ellipse((shape.cx || 0) * s, (shape.cy || 0) * s, (shape.rx || 0.1) * s, (shape.ry || 0.1) * s, 0, 0, Math.PI * 2);
-          if (shape.fill) ctx.fill();
-          if (shape.stroke) ctx.stroke();
-          break;
-        case 'rect':
-          if (shape.fill) ctx.fillRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
-          if (shape.stroke) ctx.strokeRect((shape.x || 0) * s, (shape.y || 0) * s, (shape.w || 0.1) * s, (shape.h || 0.1) * s);
-          break;
-        case 'triangle': {
-          const p = shape.points || [0, -0.3, -0.3, 0.3, 0.3, 0.3];
-          ctx.beginPath();
-          ctx.moveTo(p[0] * s, p[1] * s);
-          ctx.lineTo(p[2] * s, p[3] * s);
-          ctx.lineTo(p[4] * s, p[5] * s);
-          ctx.closePath();
-          if (shape.fill) ctx.fill();
-          if (shape.stroke) ctx.stroke();
-          break;
-        }
-        case 'line':
-          ctx.beginPath();
-          ctx.strokeStyle = shape.stroke || shape.fill || '#fff';
-          ctx.lineWidth = (shape.width || 0.02) * s;
-          ctx.moveTo((shape.x1 || 0) * s, (shape.y1 || 0) * s);
-          ctx.lineTo((shape.x2 || 0) * s, (shape.y2 || 0) * s);
-          ctx.stroke();
-          break;
-        case 'arc':
-          ctx.beginPath();
-          ctx.arc(
-            (shape.cx || 0) * s, (shape.cy || 0) * s,
-            (shape.r || 0.2) * s,
-            shape.startAngle || 0,
-            shape.endAngle || Math.PI,
-            shape.counterClockwise || false
-          );
-          if (shape.fill) { 
-            ctx.closePath(); 
-            ctx.fill(); 
-          }
-          if (shape.stroke) {
-            ctx.strokeStyle = shape.stroke;
-            ctx.lineWidth = (shape.strokeWidth || shape.width || 0.02) * s;
-            ctx.stroke();
-          }
-          break;
-        case 'polygon': {
-          const pts = shape.points || [];
-          if (pts.length >= 4) {
-            ctx.beginPath();
-            ctx.moveTo(pts[0] * s, pts[1] * s);
-            for (let i = 2; i < pts.length; i += 2) {
-              ctx.lineTo(pts[i] * s, pts[i + 1] * s);
-            }
-            ctx.closePath();
-            if (shape.fill) ctx.fill();
-            if (shape.stroke) ctx.stroke();
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  draw(ctx) {
-    ctx.save();
-
-    if (this.type === AURA_TYPES.CUSTOM && this.customConfig && this.entity?.shapes) {
-      const style = this.entity.style || 'solid';
-      const sizeMult = this.sizeMultiplier || 1.0;
-      const s = this.size * sizeMult;
-
-      ctx.translate(this.x, this.y);
-      ctx.rotate(this.rotation || 0);
-
-      if (style === 'smoke') {
-        const isFluidMode = this.customConfig?.renderMode === 'fluid';
-        
-        if (isFluidMode) {
-          // REAL SMOKE: radial gradient per puff — dense core, soft transparent edge
-          ctx.globalCompositeOperation = 'source-over';
-          
-          // Opacity curve: opaque when young, fades as it rises & expands
-          const opacity = this.life * this.life * 0.35; // Quadratic fade
-          
-          // Get the primary color from shapes
-          const baseColor = this.entity.shapes?.[0]?.fill || '#888888';
-          const r = parseInt(baseColor.slice(1, 3), 16) || 128;
-          const g = parseInt(baseColor.slice(3, 5), 16) || 128;
-          const b = parseInt(baseColor.slice(5, 7), 16) || 128;
-          
-          // Draw as a radial-gradient blob (dense center → transparent edge)
-          const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 1.2);
-          grad.addColorStop(0, `rgba(${r},${g},${b},${opacity})`);
-          grad.addColorStop(0.4, `rgba(${r},${g},${b},${opacity * 0.6})`);
-          grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(0, 0, s * 1.2, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          // Original discrete smoke style (additive for energy effects)
-          ctx.globalCompositeOperation = 'lighter';
-          
-          ctx.globalAlpha = this.life * 0.3;
-          this._drawShapes(ctx, s * 2);
-          
-          ctx.globalAlpha = this.life * 0.45;
-          this._drawShapes(ctx, s * 1.4);
-          
-          ctx.globalAlpha = this.life * 0.7;
-          this._drawShapes(ctx, s);
-        }
-
-      } else if (style === 'glow') {
-        ctx.globalCompositeOperation = 'lighter';
-        
-        ctx.globalAlpha = this.life * 0.15;
-        this._drawShapes(ctx, s * 2);
-        
-        ctx.globalAlpha = this.life * 0.35;
-        this._drawShapes(ctx, s * 1.3);
-        
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = this.life * 0.9;
-        this._drawShapes(ctx, s);
-
-      } else {
-        // Solid style - check if we're in fluid mode for enhanced blending
-        const isFluidMode = this.customConfig?.renderMode === 'fluid';
-        if (isFluidMode) {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = this.life * 0.6; // More transparent for fluid blending
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = this.life;
-        }
-        this._drawShapes(ctx, s);
-      }
-    } else {
-      // --- PRESET AURA TYPES ---
-      const sizeMult = this.sizeMultiplier || 1.0;
-      switch (this.type) {
-        case AURA_TYPES.FIRE: {
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = this.life * 0.8;
-          const fireSize = this.size * sizeMult;
-          const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, fireSize);
-          gradient.addColorStop(0, 'hsla(40, 100%, 60%, 1)');
-          gradient.addColorStop(0.5, `hsla(${this.hue}, 100%, 50%, 0.6)`);
-          gradient.addColorStop(1, 'hsla(0, 100%, 20%, 0)');
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(this.x, this.y, fireSize, 0, Math.PI * 2);
-          ctx.fill();
-          break;
-        }
-
-        case AURA_TYPES.WIND: {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.globalAlpha = this.life * 0.5;
-          ctx.strokeStyle = `hsla(${this.hue}, 70%, 75%, 1)`;
-          ctx.lineWidth = 4;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(this.x, this.y);
-          const prevY = this.y + 15;
-          const prevX = this.initialX + Math.sin(prevY * this.frequency + this.phase) * this.amplitude;
-          ctx.quadraticCurveTo((this.x + prevX) / 2 + 10, (this.y + prevY) / 2, prevX, prevY);
-          ctx.stroke();
-          break;
-        }
-
-        case AURA_TYPES.ELECTRIC:
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.globalAlpha = this.life;
-          ctx.strokeStyle = `hsla(${this.hue}, 80%, 70%, 1)`;
-          ctx.lineWidth = this.size * sizeMult;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = `hsla(${this.hue}, 90%, 50%, 0.8)`;
-          ctx.lineJoin = 'round';
-          ctx.beginPath();
-          if (this.points && this.points.length > 0) {
-            ctx.moveTo(this.points[0].x, this.points[0].y);
-            for (const p of this.points) {
-              ctx.lineTo(p.x, p.y);
-            }
-          }
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          break;
-
-        case AURA_TYPES.COSMIC:
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.globalAlpha = this.life;
-          if (this.isStar) {
-            ctx.fillStyle = 'white';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = `hsla(${this.hue}, 80%, 60%, 1)`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * (0.5 + Math.random() * 0.5), 0, Math.PI * 2);
-            ctx.fill();
-          } else {
-            ctx.strokeStyle = `hsla(${this.hue}, 90%, 70%, 1)`;
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.shadowBlur = 5;
-            ctx.shadowColor = `hsla(${this.hue}, 100%, 50%, 1)`;
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x - this.vx * 3, this.y - this.vy * 3);
-            ctx.stroke();
-          }
-          break;
-
-        case AURA_TYPES.SAKURA:
-          ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = this.life * 0.9;
-          ctx.fillStyle = `hsla(${this.hue}, 80%, 85%, 1)`;
-          ctx.translate(this.x, this.y);
-          ctx.rotate(this.rotation * Math.PI / 180);
-          ctx.beginPath();
-          ctx.ellipse(0, 0, this.size, this.size / 2, 0, 0, Math.PI * 2);
-          ctx.fill();
-          break;
-      }
-    }
-
-    ctx.restore();
-  }
-}
-
-
-// ============================================================================
-// SYSTEM PROMPT - LAYER 1: GLOW CONFIGURATION
-// Controls: glowColor, background, renderMode, density
-// ============================================================================
-const PROMPT_LAYER_GLOW = `You are a JSON-only generator for the GLOW layer of a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no extra text, no commentary.
-
-Goal:
-Generate a stylized anime aura glow setup that supports a grounded (feet-up) upward aura, with a clear intentional void in the center for compositing a character later. The result must not look like a blurry background blob. It must feel like an aura silhouette + controlled glow, not background VFX.
-
-Non-negotiable constraints:
-
-Always output exactly this JSON schema and nothing else:
-{
-  "glowColor": "#hex",
-  "background": "clear" | "dark-fade" | "black-fade",
-  "renderMode": "discrete" | "fluid",
-  "density": number
-}
-
-Default renderMode must be "discrete". Only use "fluid" when the prompt explicitly requests fog/mist/smoke/cloud.
-
-Density must be low-to-medium to avoid clutter:
-- discrete: 55 to 95
-- fluid: 60 to 80
-
-background:
-- Use "dark-fade" for energy/fire/electric/wind (subtle trails)
-- Use "black-fade" only for cosmic/space/magic (stronger trails)
-- Use "clear" for cute/clean/minimal or when prompt says "no trails / clean"
-
-glowColor must be theme-accurate and saturated (no gray/white as primary).
-
-This layer is not allowed to create the silhouette itself. It only supports it. Avoid overpowering glows.
-
-Theme mapping rules (not just color swaps; pick correct family):
-- super saiyan / power-up / golden / aura: #FFD700 or #FFC400
-- fire / flame / inferno: #FF4D1A or #FF5A00
-- electric / lightning / shock: #FFE600 or #6EE7FF (choose yellow as primary if unspecified)
-- wind / air / storm / gust: #64D2FF or #22D3EE
-- cosmic / space / galaxy: #7C3AED or #4F46E5
-- ice / frost: #60A5FA or #38BDF8
-- sakura / petals: #FB7185 or #F472B6
-- dark / shadow: #6D28D9 or #111827 (prefer purple-black, still saturated)
-
-Safety / moderation:
-If the user prompt includes NSFW sexual content, drugs, weapons, gore, self-harm, or hate terms: output a safe neutral glow:
-{"glowColor":"#60A5FA","background":"clear","renderMode":"discrete","density":60}
-
-Output only the JSON object.`;
-
-// ============================================================================
-// SYSTEM PROMPT - LAYER 2: PARTICLE CONFIGURATION
-// Controls: entities array (shapes, movement, style, size, speed)
-// ============================================================================
-const PROMPT_LAYER_PARTICLE = `=== PARTICLE LAYER SPEC ===
-
-Coordinates: center=(0,0), range -0.5 to 0.5 relative to particle size. Negative vy = UP, positive vy = DOWN.
-
-Shapes (layered bottom-to-top in each entity):
-- circle: {type,cx,cy,r,fill}
-- ellipse: {type,cx,cy,rx,ry,fill}
-- rect: {type,x,y,w,h,fill}
-- triangle: {type,points:[x1,y1,x2,y2,x3,y3],fill}
-- line: {type,x1,y1,x2,y2,stroke,width}
-- arc: {type,cx,cy,r,startAngle,endAngle,fill?,stroke?}
-- polygon: {type,points:[...],fill}
-All shapes support optional stroke/strokeWidth.
-
-Styles:
-- "solid": Opaque particles (characters, objects, icons)
-- "smoke": Wispy multi-layer effect (fire, fog, mist)
-- "glow": Bright halo with additive blending (energy, magic, stars)
-
-Movement Presets: "float"|"zigzag"|"orbit"|"rise"|"wander"|"spiral"|"rain"|"explode"|"swarm"|"bounce"|"pulse"|"vortex"|"levitate"|"fountain"|"wave"|"tornado"|"drift"|"flutter"|"whirlpool"|"magnetic"|"gravity"|"hover"
-
-Movement Custom Object:
-{
-  gravity: -0.1 to 0.1,
-  friction: 0.9-1.0,
-  wave: {axis:"x"|"y"|"both", amp:0.1-5, freq:0.1-5},
-  attract: -0.005 to 0.005,
-  spin: -2 to 2,
-  jitter: 0-0.3,
-  bounce: {floor:0.5-0.9, elasticity:0.1-0.9},
-  scale: 0.97-1.03
-}
-
-Fluid Mode Rules (when renderMode="fluid"):
-- style must be "smoke"
-- density 60-80
-- size [20,35]
-- vy [-1.8,-0.5]
-- one circle shape per entity
-
-Entity Schema:
-{
-  "weight": number (spawn probability relative to others),
-  "size": [min, max],
-  "speed": {"vx": [min, max], "vy": [min, max]},
-  "style": "solid" | "smoke" | "glow",
-  "movement": string_preset | custom_object,
-  "shapes": [shape_objects...]
-}
-
-Particle Examples:
-
-Fire flames entity:
-{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]}
-
-Cat face entity:
-{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}
-
-Lightning bolt entity:
-{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}`;
-
-// ============================================================================
-// SYSTEM PROMPT - LAYER 3: OUTER SHAPE CONFIGURATION
-// Controls: outerShape object (animated hollow ring around avatar)
-// ============================================================================
-const PROMPT_LAYER_OUTERSHAPE = `=== OUTER SHAPE (FLAME CONTOUR) LAYER SPEC ===
-
-You generate the FLAME CONTOUR layer for a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no commentary.
-
-The flame contour is a dynamic jagged silhouette rendered around a character — like Dragon Ball Z Super Saiyan aura or Jujutsu Kaisen cursed energy. It consists of:
-1. An elliptical flame shape with jagged spikes that animate upward
-2. A glowing band between outer and inner borders
-3. A hollow center where the character stands
-4. Optional dual-layer effect for depth
-
-Output schema:
-{
-  "baseColor": "#hex",
-  "tipColor": "#hex",
-  "speed": 0.5-2.0,
-  "jaggedness": 0.1-1.0,
-  "smoothness": 0.0-1.0,
-  "height": 0.5-1.5,
-  "thickness": 0.3-1.0,
-  "dualLayer": true/false,
-  "dualColor": "#hex or null",
-  "intensity": 0.5-1.5,
-  "contourStyle": "flame" | "spiky" | null
-}
-
-Parameter guide:
-- baseColor: The primary flame body color (dominant hue of the aura)
-- tipColor: The flame tips / bright edge color (usually lighter or hotter version)
-- speed: Animation speed of the flame oscillation (0.5=slow ethereal, 2.0=aggressive rapid)
-- jaggedness: How spiky/sharp the flame contour is (0.1=nearly smooth, 1.0=very sharp jagged spikes). This controls alternating spike amplitude on the contour points.
-- smoothness: Path interpolation style (0.0=sharp jagged lineTo spikes, 0.5=mixed sharp/smooth, 1.0=fully smooth quadratic curves). Controls visual sharpness of the rendered path.
-- height: Vertical upward extension multiplier (0.5=short compact, 1.5=tall dramatic flames). Top hemisphere extends more than bottom.
-- thickness: Horizontal spread/width of the flame ellipse (0.3=narrow, 1.0=wide)
-- dualLayer: Whether to render a secondary scaled-up layer behind the main flame for depth
-- dualColor: Color for the dual layer (usually darker or contrasting). Only used if dualLayer=true
-- intensity: Overall scale and glow intensity multiplier (0.5=subtle, 1.5=overwhelming)
-- contourStyle: "flame" for organic curvy flame-lick boundary (fire/energy/power/super saiyan themes), "spiky" for sharp jagged electric boundary, or null/omit for default behavior
-
-Theme mapping rules:
-- Fire / flame / inferno / blaze (explicitly fire-themed): jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8, contourStyle "flame"
-- Energy / power / super saiyan / aura / ki: jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8 (no contourStyle - uses default spiky)
-- Electric / lightning / shock: jaggedness 0.8-1.0, smoothness 0.0-0.15, height 1.0-1.2, speed 1.3-2.0
-- Wind / nature / calm / healing: jaggedness 0.2-0.4, smoothness 0.6-0.9, height 0.6-0.9, speed 0.5-0.8
-- Cosmic / void / dark / shadow: jaggedness 0.7-0.9, smoothness 0.1-0.2, height 1.2-1.5, dualLayer=true, dualColor=dark
-- Ice / frost / water: jaggedness 0.3-0.5, smoothness 0.5-0.7, height 0.8-1.0, speed 0.5-0.8
-- Cute / sakura / soft / gentle: jaggedness 0.2-0.35, smoothness 0.7-1.0, height 0.5-0.8, speed 0.4-0.7
-
-Color rules — match the theme:
-- super saiyan / golden: baseColor "#FFD700", tipColor "#FFFFFF"
-- fire / flame: baseColor "#FF4500", tipColor "#FFD700"
-- electric / thunder: baseColor "#FFD700", tipColor "#FFFFFF"
-- wind / nature: baseColor "#22D3EE", tipColor "#A5F3FC"
-- cosmic / void: baseColor "#8B00FF", tipColor "#FF00FF"
-- sakura / soft: baseColor "#FB7185", tipColor "#FECDD3"
-- ice / frost: baseColor "#00BFFF", tipColor "#E0F8FF"
-- dark / shadow: baseColor "#6D28D9", tipColor "#A855F7"
-
-Safety: If NSFW/harmful content detected, output a safe neutral shape:
-{"baseColor":"#60A5FA","tipColor":"#E0F8FF","speed":0.8,"jaggedness":0.4,"smoothness":0.6,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9}
-
-Return only the JSON object.`;
-
-// ============================================================================
-// COMBINED EXAMPLES (full JSON for LLM context)
-// ============================================================================
-const PROMPT_EXAMPLES = `=== FULL EXAMPLES ===
-
-User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FF4500","tipColor":"#FFD700","speed":1.2,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.1,"contourStyle":"flame"},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
-
-User: "super saiyan"
-{"name":"Super Saiyan","description":"Golden flames and electric sparks","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FFD700","tipColor":"#FFFFFF","speed":1.5,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.3},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
-
-User: "mystic fog"
-{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"baseColor":"#6b7280","tipColor":"#d1d5db","speed":0.6,"jaggedness":0.25,"smoothness":0.8,"height":0.7,"thickness":0.6,"dualLayer":false,"intensity":0.7},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
-
-User: "floating cat faces"
-{"name":"Neko Parade","description":"Cute floating cat face particles","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"baseColor":"#f9a8d4","tipColor":"#fecdd3","speed":0.5,"jaggedness":0.2,"smoothness":0.9,"height":0.6,"thickness":0.5,"dualLayer":false,"intensity":0.7},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
-
-User: "pokemon aura"
-{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#EF4444","tipColor":"#FBBF24","speed":0.8,"jaggedness":0.5,"smoothness":0.4,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
-
-// ============================================================================
-// TASK INSTRUCTIONS (interpretation rules and constraints)
-// ============================================================================
-const PROMPT_TASK_INSTRUCTIONS = `=== TASK INSTRUCTIONS ===
-
-How to interpret the request:
-- Power/energy/effect words ("super saiyan", "fire aura", "ice storm") → visual aura effect with themed particles. Use 2-3 entities with mixed styles. ALL entities must use colors that match the theme — e.g. fire = reds/oranges/yellows only, ice = blues/whites/cyans only. NEVER add white, gray, or off-theme colored smoke/glow/orbs to an effect aura.
-- Request describes a specific shape or character ("Pikachu", "stars") → generate ONLY that shape/character. One entity. Nothing else.
-- Request names a group or franchise without one specific thing ("Paw Patrol", "pokemon aura", "floating animals") → generate 2-3 different characters from that group. Each entity is a different character. All style:"solid", size [24,34].
-- Ambiguous → default to effect aura.
-
-Critical rules:
-1. NEVER add generic glow orbs, smoke puffs, or abstract accent particles alongside character/shape particles. If the user asks for "bomb", every particle must be a bomb. If they ask for "creeper aura", every particle must be a creeper face. No filler entities.
-2. For effect auras: every entity must stay on-theme. No white smoke, no gray puffs, no colorless filler. If user says "fire", ALL entities must be warm-colored (red, orange, yellow, amber). If user says "ice", ALL entities must be cool-colored (blue, cyan, white). Every entity must visually reinforce the same theme.
-
-Constraints:
-- vy is usually negative (upward). Positive vy only for rain/bounce/falling.
-- density: 50-200 discrete, 60-80 fluid.
-- Use bold filled shapes. Avoid outline-only shapes.
-- Minimum entity size is [18,24]. Anything smaller is unreadable.
-- Every entity must have at least 3 shapes so it looks like something recognizable.
-- Valid JSON with commas between all array elements.
-- Shape fill colors must NEVER be white (#ffffff), gray (#888, #aaa, #ccc, etc.), or any neutral color unless the theme specifically calls for it (e.g. "snow", "ghost"). Always use saturated, theme-appropriate colors.
-- ALWAYS include an "outerShape" object with flame contour parameters. The outer shape MUST match the aura theme visually. Use jaggedness and smoothness to control the flame contour style. Fire/energy: jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3. Electric: jaggedness 0.8-1.0, smoothness 0.0-0.15. Wind/calm: jaggedness 0.2-0.4, smoothness 0.6-0.9. Cute/soft: jaggedness 0.2-0.35, smoothness 0.7-1.0. Dark/cosmic: dualLayer=true with dark dualColor, jaggedness 0.7-0.9. Colors (baseColor/tipColor) must match glowColor theme.
-
-Output Schema:
-{"name":"string","description":"string (max 10 words)","glowColor":"#hex","density":number,"background":"clear"|"dark-fade"|"black-fade","renderMode":"discrete"|"fluid","outerShape":{...},"entities":[...]}`;
-
-// ============================================================================
-// FUNCTION TO BUILD COMBINED PROMPT FOR LLM
-// ============================================================================
-const buildSystemPrompt = (glowPrompt, particlePrompt, outerShapePrompt, userPrompt) => {
-  return `You are a JSON-only particle configuration generator for a Canvas 2D aura engine. Output valid JSON only — no markdown, no backticks, no commentary.
-
-${glowPrompt}
-
-${particlePrompt}
-
-${outerShapePrompt}
-
-${PROMPT_EXAMPLES}
-
-${PROMPT_TASK_INSTRUCTIONS}
-
-=== GENERATE FOR ===
-
-"${userPrompt}"`;
-};
+import { Camera, Loader2, Sparkles, ImagePlus, Wand2, X, Flame, Wind, Zap, Flower2, Sliders, Download } from 'lucide-react';
+
+import { AURA_TYPES, AURA_COLORS, PRESET_LABELS, OUTER_SHAPE_PRESETS, SHAPE_PRESETS, PARTICLE_COUNTS, CANVAS_WIDTH, CANVAS_HEIGHT, AVATAR_SIZE, CENTER_Y_RATIO } from './constants';
+import { extractSilhouette, lightenHex } from './utils';
+import FlameContourRenderer from './FlameContourRenderer';
+import Particle from './Particle';
+import { callLLM, parseLLMJson, buildSystemPrompt, PROMPT_LAYER_GLOW, PROMPT_LAYER_PARTICLE, PROMPT_LAYER_OUTERSHAPE } from './llm';
 
 export default function AuraStudio() {
   const [activeAura, setActiveAura] = useState(AURA_TYPES.NONE);
   const [avatar, setAvatar] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiMessage, setAiMessage] = useState("");
-  const [promptInput, setPromptInput] = useState("");
+  const [aiMessage, setAiMessage] = useState('');
+  const [promptInput, setPromptInput] = useState('');
   const [customAuraConfig, setCustomAuraConfig] = useState(null);
   const [showDevPanel, setShowDevPanel] = useState(true);
-  const [showOverlayOnAvatar, setShowOverlayOnAvatar] = useState(false);
-  
-  // Segregated system prompt layers for dev editing
   const [promptGlow, setPromptGlow] = useState(PROMPT_LAYER_GLOW);
   const [promptParticle, setPromptParticle] = useState(PROMPT_LAYER_PARTICLE);
   const [promptOuterShape, setPromptOuterShape] = useState(PROMPT_LAYER_OUTERSHAPE);
@@ -1981,55 +39,49 @@ export default function AuraStudio() {
   const silhouetteRef = useRef(null);
   const lastFrameTimeRef = useRef(performance.now());
 
+  const resetAuraState = () => {
+    setCustomAuraConfig(null);
+    setAiMessage('');
+    setSelectedPhysics([]);
+    setOriginalAuraConfig(null);
+    setOriginalAuraType(null);
+    setActiveShapePreset(null);
+  };
+
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const src = e.target.result;
-        setAvatar(src);
-        const radii = await extractSilhouette(src, 480, 560);
-        silhouetteRef.current = radii;
-        if (outerShapeRef.current) outerShapeRef.current.setSilhouette(radii);
-        if (overlayShapeRef.current) overlayShapeRef.current.setSilhouette(radii);
-      };
-      reader.readAsDataURL(file);
-    }
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const src = e.target.result;
+      setAvatar(src);
+      const radii = await extractSilhouette(src, CANVAS_WIDTH, CANVAS_HEIGHT, CENTER_Y_RATIO);
+      silhouetteRef.current = radii;
+      if (outerShapeRef.current) outerShapeRef.current.setSilhouette(radii);
+      if (overlayShapeRef.current) overlayShapeRef.current.setSilhouette(radii);
+    };
+    reader.readAsDataURL(file);
   };
 
   const generateAura = async () => {
     if (!promptInput.trim()) return;
     setAiLoading(true);
-    setAiMessage("The Alchemist is designing particle physics...");
-
-    // Build combined prompt from segregated system prompt layers
-    const finalPrompt = buildSystemPrompt(promptGlow, promptParticle, promptOuterShape, promptInput);
+    setAiMessage('The Alchemist is designing particle physics...');
 
     try {
-      const text = await callLLMText(finalPrompt);
+      const text = await callLLM(buildSystemPrompt(promptGlow, promptParticle, promptOuterShape, promptInput));
       if (!text) throw new Error('No response');
-      
-      // Clean and fix common JSON issues
-      let cleanJson = text.replace(/```json|```/g, '').trim();
-      
-      // Fix missing commas between array elements (common LLM mistake)
-      cleanJson = cleanJson.replace(/\}\s*\n\s*\{/g, '},\n{');
-      cleanJson = cleanJson.replace(/\]\s*\n\s*\[/g, '],\n[');
-      
-      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
-      const config = JSON.parse(jsonMatch ? jsonMatch[0] : cleanJson);
-      console.log("🎨 AI Aura Config:", JSON.stringify(config, null, 2));
+      const config = parseLLMJson(text);
       setCustomAuraConfig(config);
       setActiveAura(AURA_TYPES.CUSTOM);
       setAiMessage(`Forged: ${config.name} - ${config.description}`);
-      setPromptInput("");
-      // Clear physics testing state for new aura
+      setPromptInput('');
       setSelectedPhysics([]);
       setOriginalAuraConfig(null);
       setOriginalAuraType(null);
       setActiveShapePreset(null);
     } catch (e) {
-      console.error("Aura generation error:", e);
+      console.error('Aura generation error:', e);
       setAiMessage(`Failed: ${e.message}`);
     } finally {
       setAiLoading(false);
@@ -2038,188 +90,97 @@ export default function AuraStudio() {
 
   const togglePhysics = (physics) => {
     setSelectedPhysics(prev => {
-      const newSelection = prev.includes(physics)
-        ? prev.filter(p => p !== physics)
-        : [...prev, physics];
-
-      // Apply physics automatically after updating selection
-      if (newSelection.length > 0) {
-        setTimeout(() => applyPhysicsWithSelection(newSelection), 0);
-      }
-      // Restoration is handled by useEffect when newSelection.length === 0
-
-      return newSelection;
+      const next = prev.includes(physics) ? prev.filter(p => p !== physics) : [...prev, physics];
+      if (next.length > 0) setTimeout(() => applyPhysicsWithSelection(next), 0);
+      return next;
     });
   };
 
   const applyPhysicsWithSelection = (physicsSelection) => {
     if (physicsSelection.length === 0) return;
 
-    // If there's already a custom aura, modify it
     if (customAuraConfig && activeAura === AURA_TYPES.CUSTOM) {
-      // Save original config only on first physics application
-      if (!originalAuraConfig) {
-        setOriginalAuraConfig(JSON.parse(JSON.stringify(customAuraConfig)));
-      }
-
-      const updatedConfig = {
+      if (!originalAuraConfig) setOriginalAuraConfig(JSON.parse(JSON.stringify(customAuraConfig)));
+      setCustomAuraConfig({
         ...customAuraConfig,
         entities: customAuraConfig.entities.map((entity, idx) => {
-          const assignedPhysics = physicsSelection.length === 1 ? physicsSelection[0] : physicsSelection[idx % physicsSelection.length];
-          const isDownward = ['rain', 'gravity'].includes(assignedPhysics);
+          const assigned = physicsSelection.length === 1 ? physicsSelection[0] : physicsSelection[idx % physicsSelection.length];
+          const isDown = ['rain', 'gravity'].includes(assigned);
           const sp = entity.speed || {};
-          const updatedSpeed = isDownward ? { ...sp, vy: [Math.abs((sp.vy || [-2, -0.5])[0]), Math.abs((sp.vy || [-2, -0.5])[1])] } : sp;
-          return {
-            ...entity,
-            movement: assignedPhysics,
-            speed: updatedSpeed
-          };
-        })
-      };
-      setCustomAuraConfig(updatedConfig);
+          return { ...entity, movement: assigned, speed: isDown ? { ...sp, vy: [Math.abs((sp.vy || [-2, -0.5])[0]), Math.abs((sp.vy || [-2, -0.5])[1])] } : sp };
+        }),
+      });
       setAiMessage(`Applied physics: ${physicsSelection.join(', ')}`);
     } else if (activeAura !== AURA_TYPES.NONE && activeAura !== AURA_TYPES.CUSTOM) {
-      // Save the original preset type before converting
-      if (!originalAuraType) {
-        setOriginalAuraType(activeAura);
-      }
-
-      // Convert preset aura to custom with selected physics
-      const presetColors = {
-        [AURA_TYPES.FIRE]: '#ff5500',
-        [AURA_TYPES.WIND]: '#00ffcc',
-        [AURA_TYPES.ELECTRIC]: '#aa00ff',
-        [AURA_TYPES.COSMIC]: '#6366f1',
-        [AURA_TYPES.SAKURA]: '#ff9ec8'
-      };
-
-      const presetNames = {
-        [AURA_TYPES.FIRE]: 'Fire',
-        [AURA_TYPES.WIND]: 'Wind',
-        [AURA_TYPES.ELECTRIC]: 'Electric',
-        [AURA_TYPES.COSMIC]: 'Cosmic',
-        [AURA_TYPES.SAKURA]: 'Sakura'
-      };
-
-      const newConfig = {
-        name: `${presetNames[activeAura]} + Physics`,
-        description: `${presetNames[activeAura]} with ${physicsSelection.join(', ')} motion`,
-        glowColor: presetColors[activeAura] || '#a855f7',
+      if (!originalAuraType) setOriginalAuraType(activeAura);
+      const color = AURA_COLORS[activeAura];
+      const label = PRESET_LABELS[activeAura] || activeAura;
+      setCustomAuraConfig({
+        name: `${label} + Physics`,
+        description: `${label} with ${physicsSelection.join(', ')} motion`,
+        glowColor: color || '#a855f7',
         density: 100,
-        background: "clear",
-        renderMode: "discrete",
-        entities: physicsSelection.map(physics => {
-          const isDownward = ['rain', 'gravity'].includes(physics);
-          return {
-            shapes: [
-              { type: "circle", cx: 0, cy: 0, r: 0.35, fill: presetColors[activeAura] }
-            ],
-            size: [18, 26],
-            speed: { vx: [-1, 1], vy: isDownward ? [2, 5] : [-2, -0.5] },
-            style: "glow",
-            movement: physics
-          };
-        })
-      };
-
-      setCustomAuraConfig(newConfig);
+        background: 'clear',
+        renderMode: 'discrete',
+        entities: physicsSelection.map(physics => ({
+          shapes: [{ type: 'circle', cx: 0, cy: 0, r: 0.35, fill: color }],
+          size: [18, 26],
+          speed: { vx: [-1, 1], vy: ['rain', 'gravity'].includes(physics) ? [2, 5] : [-2, -0.5] },
+          style: 'glow',
+          movement: physics,
+        })),
+      });
       setActiveAura(AURA_TYPES.CUSTOM);
-      setAiMessage(`Applied ${physicsSelection.join(', ')} to ${presetNames[activeAura]}`);
+      setAiMessage(`Applied ${physicsSelection.join(', ')} to ${label}`);
     }
   };
 
-  // Auto-restore original aura when all physics are deselected
+  // Restore original aura when all physics are deselected
   useEffect(() => {
-    if (selectedPhysics.length === 0 && (originalAuraType || originalAuraConfig)) {
-      if (originalAuraType) {
-        // Restore preset aura
-        setActiveAura(originalAuraType);
-        setCustomAuraConfig(null);
-        setAiMessage("Restored original preset aura");
-        setOriginalAuraType(null);
-      } else if (originalAuraConfig) {
-        // Restore custom aura
-        setCustomAuraConfig(originalAuraConfig);
-        setActiveAura(AURA_TYPES.CUSTOM);
-        setAiMessage("Restored original aura");
-        setOriginalAuraConfig(null);
-      }
+    if (selectedPhysics.length > 0 || (!originalAuraType && !originalAuraConfig)) return;
+    if (originalAuraType) {
+      setActiveAura(originalAuraType);
+      setCustomAuraConfig(null);
+      setAiMessage('Restored original preset aura');
+      setOriginalAuraType(null);
+    } else if (originalAuraConfig) {
+      setCustomAuraConfig(originalAuraConfig);
+      setActiveAura(AURA_TYPES.CUSTOM);
+      setAiMessage('Restored original aura');
+      setOriginalAuraConfig(null);
     }
   }, [selectedPhysics, originalAuraType, originalAuraConfig]);
 
+  // Rebuild particles and flame renderers when config changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    particlesRef.current = [];
 
-    let count = 0;
-    if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig) {
-      count = customAuraConfig.density || 100;
-    } else {
-      switch (activeAura) {
-        case AURA_TYPES.FIRE: count = 200; break;
-        case AURA_TYPES.WIND: count = 150; break;
-        case AURA_TYPES.ELECTRIC: count = 12; break;
-        case AURA_TYPES.COSMIC: count = 100; break;
-        case AURA_TYPES.SAKURA: count = 80; break;
-        default: count = 0;
-      }
-    }
-
-    // Apply density multiplier
+    let count = activeAura === AURA_TYPES.CUSTOM && customAuraConfig
+      ? Math.round((customAuraConfig.density || 100) * 0.7)
+      : (PARTICLE_COUNTS[activeAura] || 0);
     count = Math.round(count * densityMultiplier);
 
+    // Scale particle speed by nature: aggressive = faster, calm = slower
+    const natureSpeedScale = customAuraConfig?.nature === 'aggressive' ? 1.3
+      : customAuraConfig?.nature === 'calm' ? 0.7 : 1.0;
+
+    particlesRef.current = [];
     for (let i = 0; i < count; i++) {
-      const particle = new Particle(activeAura, canvas.width, canvas.height, customAuraConfig);
-      particle.speedMultiplier = speedMultiplier;
-      particle.sizeMultiplier = sizeMultiplier;
-      particlesRef.current.push(particle);
+      const p = new Particle(activeAura, canvas.width, canvas.height, customAuraConfig);
+      p.speedMultiplier = speedMultiplier * natureSpeedScale;
+      p.sizeMultiplier = sizeMultiplier;
+      particlesRef.current.push(p);
     }
 
-    // Resolve outer shape config with shape preset priority
-    const resolveOuterShapeConfig = () => {
-      if (activeShapePreset && SHAPE_PRESETS[activeShapePreset]) {
-        const presetConfig = { ...SHAPE_PRESETS[activeShapePreset].config };
-        const auraColor = activeAura === AURA_TYPES.CUSTOM
-          ? customAuraConfig?.glowColor
-          : (activeAura !== AURA_TYPES.NONE ? AURA_COLORS[activeAura] : null);
-        if (auraColor && auraColor !== 'rgba(0,0,0,0)') {
-          presetConfig.baseColor = auraColor;
-          const rgb = (() => { const r = parseInt(auraColor.slice(1, 3), 16) || 0; const g = parseInt(auraColor.slice(3, 5), 16) || 0; const b = parseInt(auraColor.slice(5, 7), 16) || 0; return { r, g, b }; })();
-          const lighten = (v) => Math.min(255, Math.round(v + (255 - v) * 0.4));
-          presetConfig.tipColor = `#${lighten(rgb.r).toString(16).padStart(2,'0')}${lighten(rgb.g).toString(16).padStart(2,'0')}${lighten(rgb.b).toString(16).padStart(2,'0')}`;
-        }
-        return presetConfig;
-      }
-      if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
-        return customAuraConfig.outerShape;
-      }
-      if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) {
-        return OUTER_SHAPE_PRESETS[activeAura];
-      }
-      return null;
-    };
-
-    const shapeConfig = resolveOuterShapeConfig();
-
-    const outerCanvas = outerCanvasRef.current;
-    if (outerCanvas) {
-      if (!outerShapeRef.current) {
-        outerShapeRef.current = new FlameContourRenderer(outerCanvas.width, outerCanvas.height);
-      }
-      outerShapeRef.current.resize(outerCanvas.width, outerCanvas.height);
-      outerShapeRef.current.setConfig(shapeConfig);
-      if (silhouetteRef.current) outerShapeRef.current.setSilhouette(silhouetteRef.current);
-    }
-
-    const overlayCanvas = overlayCanvasRef.current;
-    if (overlayCanvas) {
-      if (!overlayShapeRef.current) {
-        overlayShapeRef.current = new FlameContourRenderer(overlayCanvas.width, overlayCanvas.height);
-      }
-      overlayShapeRef.current.resize(overlayCanvas.width, overlayCanvas.height);
-      overlayShapeRef.current.setConfig(shapeConfig);
-      if (silhouetteRef.current) overlayShapeRef.current.setSilhouette(silhouetteRef.current);
+    const shapeConfig = resolveShapeConfig(activeAura, customAuraConfig, activeShapePreset);
+    for (const ref of [outerShapeRef, overlayShapeRef]) {
+      const c = ref === outerShapeRef ? outerCanvasRef.current : overlayCanvasRef.current;
+      if (!c) continue;
+      if (!ref.current) ref.current = new FlameContourRenderer(c.width, c.height);
+      ref.current.resize(c.width, c.height);
+      ref.current.setConfig(shapeConfig);
+      if (silhouetteRef.current) ref.current.setSilhouette(silhouetteRef.current);
     }
   }, [activeAura, customAuraConfig, densityMultiplier, speedMultiplier, sizeMultiplier, activeShapePreset]);
 
@@ -2232,41 +193,9 @@ export default function AuraStudio() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    if (activeAura === AURA_TYPES.CUSTOM) {
-      const bg = customAuraConfig?.background || 'clear';
-      const renderMode = customAuraConfig?.renderMode || 'discrete';
-      
-      if (renderMode === 'fluid') {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      } else if (bg === 'dark-fade') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      } else if (bg === 'black-fade') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    } else if ([AURA_TYPES.FIRE, AURA_TYPES.ELECTRIC].includes(activeAura)) {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else if ([AURA_TYPES.COSMIC, AURA_TYPES.SAKURA].includes(activeAura)) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    clearParticleCanvas(ctx, canvas, activeAura, customAuraConfig);
 
-    if (activeAura === AURA_TYPES.NONE) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    particlesRef.current.forEach(p => {
-      p.update();
-      p.draw(ctx);
-    });
+    particlesRef.current.forEach(p => { p.update(); p.draw(ctx); });
 
     const outerCanvas = outerCanvasRef.current;
     if (outerCanvas && outerShapeRef.current) {
@@ -2276,367 +205,159 @@ export default function AuraStudio() {
       outerShapeRef.current.drawAuraOnly(outerCtx);
     }
 
-    // Overlay canvas: bolts + lower-body glow on top of avatar (always active when aura is on)
     const overlayCanvas = overlayCanvasRef.current;
-    if (overlayCanvas && outerShapeRef.current && outerShapeRef.current.config) {
-      const overlayCtx = overlayCanvas.getContext('2d');
-      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
+    if (overlayCanvas && outerShapeRef.current?.config) {
+      // Lazy-init: overlay canvas only exists in DOM after avatar upload
       if (!overlayShapeRef.current) {
         overlayShapeRef.current = new FlameContourRenderer(overlayCanvas.width, overlayCanvas.height);
+        overlayShapeRef.current.resize(overlayCanvas.width, overlayCanvas.height);
+        if (silhouetteRef.current) overlayShapeRef.current.setSilhouette(silhouetteRef.current);
       }
-      overlayShapeRef.current.resize(overlayCanvas.width, overlayCanvas.height);
-      overlayShapeRef.current.setConfig(outerShapeRef.current.config);
-      if (silhouetteRef.current) overlayShapeRef.current.setSilhouette(silhouetteRef.current);
-      overlayShapeRef.current.update(dt);
-      overlayShapeRef.current.drawBoltsAndGlow(overlayCtx);
-    } else if (overlayCanvas) {
       const overlayCtx = overlayCanvas.getContext('2d');
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      overlayShapeRef.current.setConfig(outerShapeRef.current.config);
+      overlayShapeRef.current.update(dt);
+      overlayShapeRef.current.drawBoltsAndGlow(overlayCtx);
     }
 
     animationRef.current = requestAnimationFrame(animate);
-  }, [activeAura, customAuraConfig, showOverlayOnAvatar]);
+  }, [activeAura, customAuraConfig]);
 
   useEffect(() => {
-    if (canvasRef.current) {
-      canvasRef.current.width = 480;
-      canvasRef.current.height = 560;
-    }
-    if (outerCanvasRef.current) {
-      outerCanvasRef.current.width = 480;
-      outerCanvasRef.current.height = 560;
-    }
-    if (overlayCanvasRef.current) {
-      overlayCanvasRef.current.width = 480;
-      overlayCanvasRef.current.height = 560;
+    for (const ref of [canvasRef, outerCanvasRef, overlayCanvasRef]) {
+      if (ref.current) { ref.current.width = CANVAS_WIDTH; ref.current.height = CANVAS_HEIGHT; }
     }
     lastFrameTimeRef.current = performance.now();
     animationRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationRef.current);
   }, [animate]);
 
+  const handleDownloadPNG = useCallback(() => {
+    if (!avatar) return;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = CANVAS_WIDTH;
+    offscreen.height = CANVAS_HEIGHT;
+    const ctx = offscreen.getContext('2d');
+
+    if (outerCanvasRef.current) ctx.drawImage(outerCanvasRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    if (canvasRef.current) ctx.drawImage(canvasRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const ax = (CANVAS_WIDTH - AVATAR_SIZE) / 2;
+      const ay = (CANVAS_HEIGHT - AVATAR_SIZE) / 2;
+      ctx.drawImage(img, ax, ay, AVATAR_SIZE, AVATAR_SIZE);
+      if (overlayCanvasRef.current) {
+        const ow = CANVAS_WIDTH * 1.5, oh = CANVAS_HEIGHT * 1.5;
+        ctx.drawImage(overlayCanvasRef.current, (CANVAS_WIDTH - ow) / 2, (CANVAS_HEIGHT - oh) / 2, ow, oh);
+      }
+      const link = document.createElement('a');
+      link.download = `aura-character-${Date.now()}.png`;
+      link.href = offscreen.toDataURL('image/png');
+      link.click();
+    };
+    img.src = avatar;
+  }, [avatar]);
+
   const glowColor = activeAura === AURA_TYPES.CUSTOM ? (customAuraConfig?.glowColor || '#a855f7') : AURA_COLORS[activeAura];
   const hasAura = activeAura !== AURA_TYPES.NONE;
-  const PRESET_LABELS = { fire: 'Fire', wind: 'Wind', electric: 'Shock', cosmic: 'Cosmic', sakura: 'Sakura' };
   const auraName = activeAura === AURA_TYPES.CUSTOM
-    ? (customAuraConfig?.name || "Unknown Energy")
-    : (activeAura === AURA_TYPES.NONE ? null : (PRESET_LABELS[activeAura] || activeAura));
+    ? (customAuraConfig?.name || 'Unknown Energy')
+    : (hasAura ? (PRESET_LABELS[activeAura] || activeAura) : null);
 
   return (
     <div className="h-screen bg-black text-white font-sans overflow-hidden flex flex-col relative select-none">
-    <h1 style={{color: "red"}}>sainath</h1>
-      {/* Ambient background glow that follows the aura color */}
-      <div
-        className="absolute inset-0 transition-all duration-1000 pointer-events-none"
-        style={{
-          background: hasAura
-            ? `radial-gradient(ellipse at 50% 40%, ${glowColor}15 0%, ${glowColor}08 30%, transparent 70%)`
-            : 'radial-gradient(ellipse at 50% 40%, rgba(88,28,135,0.06) 0%, transparent 70%)'
-        }}
-      />
+      <div className="absolute inset-0 transition-all duration-1000 pointer-events-none" style={{
+        background: hasAura
+          ? `radial-gradient(ellipse at 50% 40%, ${glowColor}15 0%, ${glowColor}08 30%, transparent 70%)`
+          : 'radial-gradient(ellipse at 50% 40%, rgba(88,28,135,0.06) 0%, transparent 70%)'
+      }} />
 
-      {/* Top bar */}
       <header className="relative z-30 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
             <Sparkles size={16} className="text-white" />
           </div>
-          <span className="text-sm font-semibold tracking-widest uppercase text-gray-300">
-            Aura Studio
-          </span>
+          <span className="text-sm font-semibold tracking-widest uppercase text-gray-300">Aura Studio</span>
         </div>
-
         <div className="flex items-center gap-2">
-          {/* Overlay on avatar toggle */}
-          <button
-            onClick={() => setShowOverlayOnAvatar(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-              showOverlayOnAvatar
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                : 'text-gray-400 border-gray-700 hover:text-purple-300 hover:border-purple-500/40 hover:bg-purple-500/10'
-            }`}
-            title="Toggle outer shape overlay on avatar (85% transparency)"
-          >
-            <Sparkles size={12} />
-            Overlay
+          <button onClick={() => setShowPhysicsPanel(v => !v)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showPhysicsPanel ? 'bg-purple-500/15 text-purple-400 border-purple-500/30' : 'text-gray-600 border-gray-700 hover:text-gray-400 hover:bg-white/[0.06] hover:border-purple-500/20'}`}>
+            <span className="text-[10px]">⚡</span> Physics
+            {selectedPhysics.length > 0 && <span className="px-1 py-0.5 rounded-full bg-purple-500/30 text-[9px] min-w-[16px] text-center">{selectedPhysics.length}</span>}
           </button>
-
-          {/* Physics panel toggle */}
-          <button
-            onClick={() => setShowPhysicsPanel(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-              showPhysicsPanel
-                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-                : 'text-gray-600 border-gray-700 hover:text-gray-400 hover:bg-white/[0.06] hover:border-purple-500/20'
-            }`}
-          >
-            <span className="text-[10px]">⚡</span>
-            Physics
-            {selectedPhysics.length > 0 && (
-              <span className="px-1 py-0.5 rounded-full bg-purple-500/30 text-[9px] min-w-[16px] text-center">
-                {selectedPhysics.length}
-              </span>
-            )}
+          <button onClick={() => setShowDevPanel(v => !v)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${showDevPanel ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.06]'}`}>
+            <span className="font-mono text-[10px]">{'{}'}</span> Dev
           </button>
-
-          {/* Dev prompt editor toggle */}
-          <button
-            onClick={() => setShowDevPanel(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              showDevPanel
-                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                : 'text-gray-600 hover:text-gray-400 hover:bg-white/[0.06]'
-            }`}
-          >
-            <span className="font-mono text-[10px]">{'{}'}</span>
-            Dev
+          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-all">
+            <ImagePlus size={14} /> {avatar ? 'Change' : 'Upload'}
           </button>
-
-          {/* Upload avatar button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/10 transition-all"
-          >
-            <ImagePlus size={14} />
-            {avatar ? 'Change' : 'Upload'}
-          </button>
+          {avatar && hasAura && (
+            <button onClick={handleDownloadPNG} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-green-400 hover:text-white hover:bg-green-500/15 border border-green-500/20 hover:border-green-500/40 transition-all">
+              <Download size={14} /> Download PNG
+            </button>
+          )}
         </div>
       </header>
 
-      {/* Body: main stage + side panels */}
       <main className="flex-1 flex relative z-10 min-h-0 overflow-hidden">
-
         {/* Left: Physics panel */}
-        <div
-          className={`flex-shrink-0 border-r border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${
-            showPhysicsPanel ? 'w-72' : 'w-0 overflow-hidden border-r-0'
-          }`}
-        >
+        <div className={`flex-shrink-0 border-r border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${showPhysicsPanel ? 'w-72' : 'w-0 overflow-hidden border-r-0'}`}>
           {showPhysicsPanel && (
             <>
-              {/* Header */}
               <div className="px-3 py-2.5 border-b border-purple-500/10 bg-purple-500/[0.03] flex-shrink-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-purple-300 flex items-center gap-2">
-                    <span className="text-sm">⚡</span>
-                    Physics Controls
-                  </span>
-                  {selectedPhysics.length > 0 && (
-                    <button
-                      onClick={() => setSelectedPhysics([])}
-                      className="text-[10px] text-gray-600 hover:text-purple-400 transition-colors px-2 py-1 rounded hover:bg-purple-500/10"
-                    >
-                      Clear All
-                    </button>
-                  )}
+                  <span className="text-xs font-semibold text-purple-300 flex items-center gap-2"><span className="text-sm">⚡</span> Physics Controls</span>
+                  {selectedPhysics.length > 0 && <button onClick={() => setSelectedPhysics([])} className="text-[10px] text-gray-600 hover:text-purple-400 transition-colors px-2 py-1 rounded hover:bg-purple-500/10">Clear All</button>}
                 </div>
               </div>
-
-              {/* Description */}
               <div className="px-3 py-2 border-b border-white/[0.04] bg-black/20">
-                <span className="text-[9px] text-gray-500">
-                  Select physics types to apply to your aura. Multi-select enabled.
-                </span>
+                <span className="text-[9px] text-gray-500">Select physics types to apply to your aura. Multi-select enabled.</span>
               </div>
-
-              {/* Physics categories */}
               <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                {/* Upward Motion Physics */}
+                {[
+                  { label: '↑ Upward Motion', color: 'green', items: ['levitate', 'fountain', 'tornado', 'drift', 'flutter'] },
+                  { label: '⚡ Original', color: 'blue', items: ['float', 'zigzag', 'orbit', 'rise', 'wander', 'spiral'] },
+                  { label: '🌀 Dynamic', color: 'purple', items: ['rain', 'explode', 'swarm', 'bounce', 'pulse', 'vortex'] },
+                  { label: '✨ New Physics', color: 'amber', items: ['wave', 'whirlpool', 'magnetic', 'gravity', 'hover'] },
+                ].map(({ label, color, items }) => (
+                  <div key={label}>
+                    <div className={`text-[10px] text-${color}-400/80 uppercase tracking-wide mb-2 px-1 font-semibold`}>{label}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map(physics => (
+                        <button key={physics} onClick={() => togglePhysics(physics)} className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${selectedPhysics.includes(physics) ? `bg-${color}-500/25 text-${color}-300 border border-${color}-500/50 shadow-sm shadow-${color}-500/20` : `bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-${color}-500/30 hover:bg-${color}-500/10`}`}>
+                          {physics}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
                 <div>
-                  <div className="text-[10px] text-green-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
-                    ↑ Upward Motion
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['levitate', 'fountain', 'tornado', 'drift', 'flutter'].map(physics => (
-                      <button
-                        key={physics}
-                        onClick={() => togglePhysics(physics)}
-                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
-                          selectedPhysics.includes(physics)
-                            ? 'bg-green-500/25 text-green-300 border border-green-500/50 shadow-sm shadow-green-500/20'
-                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-green-500/30 hover:bg-green-500/10'
-                        }`}
-                      >
-                        {physics}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Original Physics */}
-                <div>
-                  <div className="text-[10px] text-blue-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
-                    ⚡ Original
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['float', 'zigzag', 'orbit', 'rise', 'wander', 'spiral'].map(physics => (
-                      <button
-                        key={physics}
-                        onClick={() => togglePhysics(physics)}
-                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
-                          selectedPhysics.includes(physics)
-                            ? 'bg-blue-500/25 text-blue-300 border border-blue-500/50 shadow-sm shadow-blue-500/20'
-                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-blue-500/30 hover:bg-blue-500/10'
-                        }`}
-                      >
-                        {physics}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Dynamic Physics */}
-                <div>
-                  <div className="text-[10px] text-purple-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
-                    🌀 Dynamic
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['rain', 'explode', 'swarm', 'bounce', 'pulse', 'vortex'].map(physics => (
-                      <button
-                        key={physics}
-                        onClick={() => togglePhysics(physics)}
-                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
-                          selectedPhysics.includes(physics)
-                            ? 'bg-purple-500/25 text-purple-300 border border-purple-500/50 shadow-sm shadow-purple-500/20'
-                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-purple-500/30 hover:bg-purple-500/10'
-                        }`}
-                      >
-                        {physics}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* New Physics */}
-                <div>
-                  <div className="text-[10px] text-amber-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
-                    ✨ New Physics
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['wave', 'whirlpool', 'magnetic', 'gravity', 'hover'].map(physics => (
-                      <button
-                        key={physics}
-                        onClick={() => togglePhysics(physics)}
-                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all ${
-                          selectedPhysics.includes(physics)
-                            ? 'bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20'
-                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-amber-500/30 hover:bg-amber-500/10'
-                        }`}
-                      >
-                        {physics}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Outer Shape Presets */}
-                <div>
-                  <div className="text-[10px] text-rose-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">
-                    🔷 Outer Shape
-                  </div>
+                  <div className="text-[10px] text-rose-400/80 uppercase tracking-wide mb-2 px-1 font-semibold">🔷 Outer Shape</div>
                   <div className="flex flex-wrap gap-1.5">
                     {Object.entries(SHAPE_PRESETS).map(([key, preset]) => (
-                      <button
-                        key={key}
-                        onClick={() => setActiveShapePreset(prev => prev === key ? null : key)}
-                        className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all flex items-center gap-1 ${
-                          activeShapePreset === key
-                            ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-sm shadow-rose-500/20'
-                            : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-rose-500/30 hover:bg-rose-500/10'
-                        }`}
-                      >
-                        <span className="text-[10px]">{preset.icon}</span>
-                        {preset.name}
+                      <button key={key} onClick={() => setActiveShapePreset(prev => prev === key ? null : key)} className={`px-2.5 py-1.5 rounded text-[11px] font-medium transition-all flex items-center gap-1 ${activeShapePreset === key ? 'bg-rose-500/25 text-rose-300 border border-rose-500/50 shadow-sm shadow-rose-500/20' : 'bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-gray-300 hover:border-rose-500/30 hover:bg-rose-500/10'}`}>
+                        <span className="text-[10px]">{preset.icon}</span> {preset.name}
                       </button>
                     ))}
                   </div>
                 </div>
-
-                {/* Aura Controls Section */}
                 <div className="pt-4 mt-4 border-t border-white/[0.1]">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sliders size={14} className="text-cyan-400" />
-                    <span className="text-xs font-semibold text-cyan-300">Aura Controls</span>
-                  </div>
-
-                  {/* Density Slider */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-medium text-gray-400">Density</label>
-                      <span className="text-[10px] text-gray-500 font-mono">
-                        {(densityMultiplier * 100).toFixed(0)}%
-                      </span>
+                  <div className="flex items-center gap-2 mb-3"><Sliders size={14} className="text-cyan-400" /><span className="text-xs font-semibold text-cyan-300">Aura Controls</span></div>
+                  {[
+                    { label: 'Density', value: densityMultiplier, set: setDensityMultiplier },
+                    { label: 'Speed', value: speedMultiplier, set: setSpeedMultiplier },
+                    { label: 'Size', value: sizeMultiplier, set: setSizeMultiplier },
+                  ].map(({ label, value, set }) => (
+                    <div key={label} className="space-y-2 mb-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-medium text-gray-400">{label}</label>
+                        <span className="text-[10px] text-gray-500 font-mono">{(value * 100).toFixed(0)}%</span>
+                      </div>
+                      <input type="range" min="0.1" max="3" step="0.1" value={value} onChange={e => set(parseFloat(e.target.value))} className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer" style={{ background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((value - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((value - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)` }} />
                     </div>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="3"
-                      step="0.1"
-                      value={densityMultiplier}
-                      onChange={(e) => setDensityMultiplier(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((densityMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((densityMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
-                      }}
-                    />
-                  </div>
-
-                  {/* Speed Slider */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-medium text-gray-400">Speed</label>
-                      <span className="text-[10px] text-gray-500 font-mono">
-                        {(speedMultiplier * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="3"
-                      step="0.1"
-                      value={speedMultiplier}
-                      onChange={(e) => setSpeedMultiplier(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((speedMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((speedMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
-                      }}
-                    />
-                  </div>
-
-                  {/* Size Slider */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-medium text-gray-400">Size</label>
-                      <span className="text-[10px] text-gray-500 font-mono">
-                        {(sizeMultiplier * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="3"
-                      step="0.1"
-                      value={sizeMultiplier}
-                      onChange={(e) => setSizeMultiplier(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, rgb(34 211 238) 0%, rgb(34 211 238) ${((sizeMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) ${((sizeMultiplier - 0.1) / 2.9) * 100}%, rgba(255,255,255,0.1) 100%)`
-                      }}
-                    />
-                  </div>
-
-                  {/* Reset Button */}
-                  <button
-                    onClick={() => {
-                      setDensityMultiplier(1.0);
-                      setSpeedMultiplier(1.0);
-                      setSizeMultiplier(1.0);
-                    }}
-                    className="w-full mt-3 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-cyan-500/10 transition-all"
-                  >
-                    Reset to 100%
-                  </button>
+                  ))}
+                  <button onClick={() => { setDensityMultiplier(1.0); setSpeedMultiplier(1.0); setSizeMultiplier(1.0); }} className="w-full mt-3 px-3 py-1.5 rounded-lg text-[10px] font-medium bg-white/[0.04] text-gray-500 border border-white/[0.08] hover:text-cyan-300 hover:border-cyan-500/30 hover:bg-cyan-500/10 transition-all">Reset to 100%</button>
                 </div>
               </div>
             </>
@@ -2645,105 +366,37 @@ export default function AuraStudio() {
 
         {/* Center: canvas + controls */}
         <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4 min-h-0 min-w-0">
-
-          {/* Canvas + Avatar container */}
           <div className="relative w-full max-w-lg flex-1 flex items-center justify-center min-h-0">
-
-            {/* Particle canvas */}
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full z-10 pointer-events-none"
-            />
-
-            {/* Outer shape canvas — aura flame behind the character */}
-            <canvas
-              ref={outerCanvasRef}
-              className="absolute inset-0 w-full h-full z-[15] pointer-events-none"
-            />
-
-            {/* Avatar */}
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full z-10 pointer-events-none" />
+            <canvas ref={outerCanvasRef} className="absolute inset-0 w-full h-full z-[15] pointer-events-none" />
             <div className="relative z-20 w-56 h-56 md:w-72 md:h-72 transition-all duration-700 ease-out">
               {avatar ? (
                 <>
-                  <img
-                    src={avatar}
-                    alt="Avatar"
-                    className="w-full h-full object-contain transition-all duration-700"
-                    style={{
-                      filter: hasAura
-                        ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))`
-                        : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
-                    }}
-                  />
-                  {/* Overlay canvas — renders outer shape ON TOP of avatar with transparency */}
-                  <canvas
-                    ref={overlayCanvasRef}
-                    width={480}
-                    height={560}
-                    className="absolute inset-0 w-full h-full pointer-events-none"
-                    style={{ 
-                      transform: 'translate(-50%, -50%)',
-                      top: '50%',
-                      left: '50%',
-                      width: '150%',
-                      height: '150%'
-                    }}
-                  />
+                  <img src={avatar} alt="Avatar" className="w-full h-full object-contain transition-all duration-700" style={{ filter: hasAura ? `drop-shadow(0 0 30px ${glowColor}) drop-shadow(0 0 60px ${glowColor}80) drop-shadow(0 8px 16px rgba(0,0,0,0.6))` : 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))' }} />
+                  <canvas ref={overlayCanvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="absolute pointer-events-none" style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '150%', height: '150%' }} />
                 </>
               ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] flex flex-col items-center justify-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/[0.03] transition-all duration-300 group"
-                >
-                  <div className="w-20 h-20 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4 group-hover:bg-purple-500/10 transition-colors">
-                    <Camera size={32} className="text-gray-600 group-hover:text-purple-400 transition-colors" />
-                  </div>
+                <div onClick={() => fileInputRef.current?.click()} className="w-full h-full rounded-3xl border border-white/[0.06] bg-white/[0.02] flex flex-col items-center justify-center cursor-pointer hover:border-purple-500/30 hover:bg-purple-500/[0.03] transition-all duration-300 group">
+                  <div className="w-20 h-20 rounded-2xl bg-white/[0.04] flex items-center justify-center mb-4 group-hover:bg-purple-500/10 transition-colors"><Camera size={32} className="text-gray-600 group-hover:text-purple-400 transition-colors" /></div>
                   <p className="text-sm font-medium text-gray-600 group-hover:text-gray-400 transition-colors">Drop your character here</p>
                   <p className="text-xs text-gray-700 mt-1">PNG, JPG, or WebP</p>
                 </div>
               )}
             </div>
-
-            {/* Soft vignette */}
-            <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{background: 'radial-gradient(circle, transparent 55%, rgba(0,0,0,0.4) 100%)'}} />
+            <div className="absolute inset-0 pointer-events-none z-30 rounded-3xl" style={{ background: 'radial-gradient(circle, transparent 55%, rgba(0,0,0,0.4) 100%)' }} />
           </div>
 
-          {/* Bottom controls */}
           <div className="relative z-40 w-full max-w-lg mt-2 space-y-3">
-
-            {/* Aura name badge */}
             {auraName && (
               <div className="flex items-center justify-center gap-3">
-                <div
-                  className="px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.2em] uppercase transition-all duration-500 flex items-center gap-2"
-                  style={{
-                    color: glowColor,
-                    background: `${glowColor}12`,
-                    border: `1px solid ${glowColor}25`,
-                    textShadow: `0 0 20px ${glowColor}60`
-                  }}
-                >
+                <div className="px-4 py-1.5 rounded-full text-xs font-bold tracking-[0.2em] uppercase transition-all duration-500 flex items-center gap-2" style={{ color: glowColor, background: `${glowColor}12`, border: `1px solid ${glowColor}25`, textShadow: `0 0 20px ${glowColor}60` }}>
                   <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: glowColor }} />
                   {auraName}
                 </div>
-                <button
-                  onClick={() => {
-                    setActiveAura(AURA_TYPES.NONE);
-                    setCustomAuraConfig(null);
-                    setAiMessage("");
-                    setSelectedPhysics([]);
-                    setOriginalAuraConfig(null);
-                    setOriginalAuraType(null);
-                    setActiveShapePreset(null);
-                  }}
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"
-                >
-                  <X size={12} />
-                </button>
+                <button onClick={() => { setActiveAura(AURA_TYPES.NONE); resetAuraState(); }} className="w-6 h-6 rounded-full flex items-center justify-center text-gray-600 hover:text-white hover:bg-white/10 transition-all"><X size={12} /></button>
               </div>
             )}
 
-            {/* Preset aura buttons */}
             <div className="flex items-center justify-center gap-1.5 flex-wrap">
               {[
                 { type: AURA_TYPES.FIRE, icon: <Flame size={13} />, label: 'Fire', color: '#ff5500' },
@@ -2752,129 +405,40 @@ export default function AuraStudio() {
                 { type: AURA_TYPES.COSMIC, icon: <Sparkles size={13} />, label: 'Cosmic', color: '#6366f1' },
                 { type: AURA_TYPES.SAKURA, icon: <Flower2 size={13} />, label: 'Sakura', color: '#ff9ec8' },
               ].map(({ type, icon, label, color }) => (
-                <button
-                  key={type}
-                  onClick={() => {
-                    if (activeAura === type) {
-                      setActiveAura(AURA_TYPES.NONE);
-                    } else {
-                      setActiveAura(type);
-                      setCustomAuraConfig(null);
-                      setAiMessage("");
-                      setSelectedPhysics([]);
-                      setOriginalAuraConfig(null);
-                      setOriginalAuraType(null);
-                      setActiveShapePreset(null);
-                    }
-                  }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${
-                    activeAura === type
-                      ? 'scale-105'
-                      : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12] hover:bg-white/[0.04]'
-                  }`}
-                  style={activeAura === type ? {
-                    background: `${color}18`,
-                    color: color,
-                    borderColor: `${color}35`,
-                    boxShadow: `0 0 10px ${color}25`
-                  } : {}}
-                >
-                  {icon}
-                  {label}
+                <button key={type} onClick={() => { if (activeAura === type) { setActiveAura(AURA_TYPES.NONE); } else { setActiveAura(type); resetAuraState(); } }}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-300 border ${activeAura === type ? 'scale-105' : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12] hover:bg-white/[0.04]'}`}
+                  style={activeAura === type ? { background: `${color}18`, color, borderColor: `${color}35`, boxShadow: `0 0 10px ${color}25` } : {}}>
+                  {icon} {label}
                 </button>
               ))}
             </div>
 
-            {/* AI message */}
-            {aiMessage && (
-              <p className="text-center text-xs text-gray-500 italic truncate px-4">
-                {aiMessage}
-              </p>
-            )}
+            {aiMessage && <p className="text-center text-xs text-gray-500 italic truncate px-4">{aiMessage}</p>}
 
-            {/* Generator input */}
             <div className="relative group">
-              <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm"
-                style={{ background: `linear-gradient(135deg, ${hasAura ? glowColor : '#a855f7'}40, transparent)` }}
-              />
+              <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm" style={{ background: `linear-gradient(135deg, ${hasAura ? glowColor : '#a855f7'}40, transparent)` }} />
               <div className="relative flex items-center bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden backdrop-blur-sm group-focus-within:border-white/[0.15] transition-all">
-                <div className="pl-4 pr-2 text-gray-600">
-                  <Wand2 size={16} />
-                </div>
-                <input
-                  type="text"
-                  value={promptInput}
-                  onChange={(e) => setPromptInput(e.target.value)}
-                  placeholder={aiLoading ? "Generating..." : "Describe an aura... e.g. 'super saiyan energy'"}
-                  disabled={aiLoading}
-                  className="flex-1 bg-transparent py-3.5 pr-4 text-sm text-white focus:outline-none placeholder:text-gray-600 disabled:opacity-40"
-                  onKeyDown={(e) => e.key === 'Enter' && generateAura()}
-                />
-                {aiLoading ? (
-                  <div className="pr-4">
-                    <Loader2 size={16} className="animate-spin text-purple-400" />
-                  </div>
-                ) : promptInput.trim() && (
-                  <button
-                    onClick={generateAura}
-                    className="mr-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.08] text-gray-300 hover:bg-white/[0.15] hover:text-white transition-all"
-                  >
-                    Enter
-                  </button>
-                )}
+                <div className="pl-4 pr-2 text-gray-600"><Wand2 size={16} /></div>
+                <input type="text" value={promptInput} onChange={e => setPromptInput(e.target.value)} placeholder={aiLoading ? 'Generating...' : "Describe an aura... e.g. 'super saiyan energy'"} disabled={aiLoading} className="flex-1 bg-transparent py-3.5 pr-4 text-sm text-white focus:outline-none placeholder:text-gray-600 disabled:opacity-40" onKeyDown={e => e.key === 'Enter' && generateAura()} />
+                {aiLoading ? <div className="pr-4"><Loader2 size={16} className="animate-spin text-purple-400" /></div>
+                  : promptInput.trim() && <button onClick={generateAura} className="mr-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.08] text-gray-300 hover:bg-white/[0.15] hover:text-white transition-all">Enter</button>}
               </div>
             </div>
-
           </div>
         </div>
 
         {/* Right: Dev panel */}
-        <div
-          className={`flex-shrink-0 border-l border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${
-            showDevPanel ? 'w-96' : 'w-0 overflow-hidden border-l-0'
-          }`}
-        >
+        <div className={`flex-shrink-0 border-l border-white/[0.06] bg-[#09090c] flex flex-col transition-all duration-300 ${showDevPanel ? 'w-96' : 'w-0 overflow-hidden border-l-0'}`}>
           {showDevPanel && (
             <>
-              {/* Tab header */}
               <div className="flex items-center justify-between px-2 py-2 border-b border-amber-500/10 bg-amber-500/[0.03] flex-shrink-0">
                 <div className="flex gap-1">
-                  {[
-                    { id: 'glow', label: 'Glow', color: '#ff9500' },
-                    { id: 'particle', label: 'Particle', color: '#00d4ff' },
-                    { id: 'outerShape', label: 'OuterShape', color: '#a855f7' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActivePromptTab(tab.id)}
-                      className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${
-                        activePromptTab === tab.id
-                          ? 'text-white'
-                          : 'text-gray-600 hover:text-gray-400'
-                      }`}
-                      style={activePromptTab === tab.id ? {
-                        background: `${tab.color}20`,
-                        color: tab.color,
-                        border: `1px solid ${tab.color}40`
-                      } : {}}
-                    >
-                      {tab.label}
-                    </button>
+                  {[{ id: 'glow', label: 'Glow', color: '#ff9500' }, { id: 'particle', label: 'Particle', color: '#00d4ff' }, { id: 'outerShape', label: 'OuterShape', color: '#a855f7' }].map(tab => (
+                    <button key={tab.id} onClick={() => setActivePromptTab(tab.id)} className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${activePromptTab === tab.id ? 'text-white' : 'text-gray-600 hover:text-gray-400'}`} style={activePromptTab === tab.id ? { background: `${tab.color}20`, color: tab.color, border: `1px solid ${tab.color}40` } : {}}>{tab.label}</button>
                   ))}
                 </div>
-                <button
-                  onClick={() => {
-                    if (activePromptTab === 'glow') setPromptGlow(PROMPT_LAYER_GLOW);
-                    else if (activePromptTab === 'particle') setPromptParticle(PROMPT_LAYER_PARTICLE);
-                    else setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
-                  }}
-                  className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-amber-500/10"
-                >
-                  Reset
-                </button>
+                <button onClick={() => { if (activePromptTab === 'glow') setPromptGlow(PROMPT_LAYER_GLOW); else if (activePromptTab === 'particle') setPromptParticle(PROMPT_LAYER_PARTICLE); else setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE); }} className="text-[10px] text-gray-600 hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-amber-500/10">Reset</button>
               </div>
-
-              {/* Tab description */}
               <div className="px-3 py-2 border-b border-white/[0.04] bg-black/20">
                 <span className="text-[9px] text-gray-500">
                   {activePromptTab === 'glow' && 'Controls: glowColor, background, renderMode, density'}
@@ -2882,49 +446,61 @@ export default function AuraStudio() {
                   {activePromptTab === 'outerShape' && 'Controls: outerShape object (animated hollow ring)'}
                 </span>
               </div>
-
-              {/* Textarea for active tab */}
-              <textarea
-                value={
-                  activePromptTab === 'glow' ? promptGlow :
-                  activePromptTab === 'particle' ? promptParticle :
-                  promptOuterShape
-                }
-                onChange={(e) => {
-                  if (activePromptTab === 'glow') setPromptGlow(e.target.value);
-                  else if (activePromptTab === 'particle') setPromptParticle(e.target.value);
-                  else setPromptOuterShape(e.target.value);
-                }}
-                className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed"
-                spellCheck={false}
-              />
-
-              {/* Reset all button */}
+              <textarea value={activePromptTab === 'glow' ? promptGlow : activePromptTab === 'particle' ? promptParticle : promptOuterShape} onChange={e => { if (activePromptTab === 'glow') setPromptGlow(e.target.value); else if (activePromptTab === 'particle') setPromptParticle(e.target.value); else setPromptOuterShape(e.target.value); }} className="flex-1 w-full bg-transparent px-3 py-2.5 text-[11px] font-mono text-gray-400 focus:outline-none resize-none leading-relaxed" spellCheck={false} />
               <div className="px-3 py-2 border-t border-white/[0.04] bg-black/20 flex justify-end">
-                <button
-                  onClick={() => {
-                    setPromptGlow(PROMPT_LAYER_GLOW);
-                    setPromptParticle(PROMPT_LAYER_PARTICLE);
-                    setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE);
-                  }}
-                  className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10"
-                >
-                  Reset All Layers
-                </button>
+                <button onClick={() => { setPromptGlow(PROMPT_LAYER_GLOW); setPromptParticle(PROMPT_LAYER_PARTICLE); setPromptOuterShape(PROMPT_LAYER_OUTERSHAPE); }} className="text-[10px] text-gray-500 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10">Reset All Layers</button>
               </div>
             </>
           )}
         </div>
-
       </main>
 
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleImageUpload}
-        accept="image/png, image/jpeg, image/webp"
-        className="hidden"
-      />
+      <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/png, image/jpeg, image/webp" className="hidden" />
     </div>
   );
+}
+
+function resolveShapeConfig(activeAura, customAuraConfig, activeShapePreset) {
+  if (activeShapePreset && SHAPE_PRESETS[activeShapePreset]) {
+    const config = { ...SHAPE_PRESETS[activeShapePreset].config };
+    const auraColor = activeAura === AURA_TYPES.CUSTOM
+      ? customAuraConfig?.glowColor
+      : (activeAura !== AURA_TYPES.NONE ? AURA_COLORS[activeAura] : null);
+    if (auraColor && auraColor !== 'rgba(0,0,0,0)') {
+      config.baseColor = auraColor;
+      config.tipColor = lightenHex(auraColor);
+    }
+    return config;
+  }
+  if (activeAura === AURA_TYPES.CUSTOM && customAuraConfig?.outerShape) {
+    return { ...customAuraConfig.outerShape, nature: customAuraConfig.nature || customAuraConfig.outerShape.nature };
+  }
+  if (activeAura !== AURA_TYPES.NONE && OUTER_SHAPE_PRESETS[activeAura]) return OUTER_SHAPE_PRESETS[activeAura];
+  return null;
+}
+
+function clearParticleCanvas(ctx, canvas, activeAura, customAuraConfig) {
+  let mode = 'clear';
+  if (activeAura === AURA_TYPES.CUSTOM) {
+    if (customAuraConfig?.renderMode !== 'fluid') {
+      const bg = customAuraConfig?.background || 'clear';
+      if (bg === 'dark-fade' || bg === 'black-fade') mode = bg;
+    }
+  } else if (activeAura === AURA_TYPES.FIRE || activeAura === AURA_TYPES.ELECTRIC) {
+    mode = 'dark-fade';
+  } else if (activeAura === AURA_TYPES.COSMIC || activeAura === AURA_TYPES.SAKURA) {
+    mode = 'black-fade';
+  }
+
+  if (mode === 'dark-fade') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else if (mode === 'black-fade') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 }
