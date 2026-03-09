@@ -177,10 +177,11 @@ export default class FlameContourRenderer {
 
     this._drawFlameBand(ctx, outerPts, innerPts, baseColor, tipColor);
 
-    const colors = gradientColors?.length >= 3
+    const colors = gradientColors?.length >= 2
       ? gradientColors
       : deriveGradientColors(baseColor, tipColor);
-    this._drawGradientSweep(ctx, outerPts, innerPts, colors);
+    const mode = this._resolveGradientMode();
+    this._drawDynamicGradient(ctx, outerPts, innerPts, colors, mode);
 
     if (dualLayer && dualColor) {
       this._drawFlameShape(ctx, outerPts, dualColor, baseColor, 1.15, 0.35);
@@ -200,15 +201,64 @@ export default class FlameContourRenderer {
 
   // --- Private: animated multi-color gradient ---
 
-  _drawGradientSweep(ctx, outerPts, innerPts, colors) {
-    const count = colors.length;
-    const rotation = this.time * 0.4;
-    const sliceAngle = TAU / count;
-    const reach = Math.max(this.w, this.h) * 0.6;
-
+  _drawDynamicGradient(ctx, outerPts, innerPts, colors, mode) {
     ctx.save();
     this.buildFlamePath(ctx, outerPts);
     ctx.clip();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.55;
+
+    if (mode === 'linear') this._drawLinearGradientField(ctx, colors);
+    else if (mode === 'radial') this._drawRadialGradientField(ctx, colors);
+    else this._drawAngularGradientField(ctx, colors);
+    ctx.restore();
+
+    ctx.globalCompositeOperation = 'destination-out';
+    this.buildFlamePath(ctx, innerPts);
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  _resolveGradientMode() {
+    const mode = this.config?.gradientMode;
+    if (mode === 'linear' || mode === 'radial' || mode === 'angular') return mode;
+    if (this.config?.nature === 'calm') return 'linear';
+    if (this.config?.overlay === 'bolts') return 'angular';
+    return 'radial';
+  }
+
+  _drawLinearGradientField(ctx, colors) {
+    const sweep = this.time * 0.22;
+    const span = Math.max(this.w, this.h) * 0.75;
+    const sx = this.cx + Math.cos(sweep) * span;
+    const sy = this.cy + Math.sin(sweep * 0.9) * span;
+    const ex = this.cx - Math.cos(sweep * 1.03) * span;
+    const ey = this.cy - Math.sin(sweep) * span;
+    const grad = ctx.createLinearGradient(sx, sy, ex, ey);
+    this._applyGradientStops(grad, colors);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.w, this.h);
+  }
+
+  _drawRadialGradientField(ctx, colors) {
+    const reach = Math.max(this.w, this.h) * 0.66;
+    const orbit = this.time * 0.18;
+    const ox = this.cx + Math.cos(orbit) * this.w * 0.09;
+    const oy = this.cy + Math.sin(orbit * 1.15) * this.h * 0.08;
+    const grad = ctx.createRadialGradient(this.cx, this.cy, reach * 0.15, ox, oy, reach);
+    this._applyGradientStops(grad, colors);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.w, this.h);
+  }
+
+  _drawAngularGradientField(ctx, colors) {
+    const count = colors.length;
+    const rotation = this.time * 0.28;
+    const sliceAngle = TAU / count;
+    const reach = Math.max(this.w, this.h) * 0.62;
 
     for (let i = 0; i < count; i++) {
       const angle = rotation + i * sliceAngle;
@@ -217,9 +267,6 @@ export default class FlameContourRenderer {
       const nextColor = colors[(i + 1) % count];
 
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.45;
-
       ctx.beginPath();
       ctx.moveTo(this.cx, this.cy);
       ctx.arc(this.cx, this.cy, reach, angle, nextAngle);
@@ -229,22 +276,36 @@ export default class FlameContourRenderer {
       const gx = this.cx + Math.cos(midAngle) * reach * 0.7;
       const gy = this.cy + Math.sin(midAngle) * reach * 0.7;
       const grad = ctx.createRadialGradient(this.cx, this.cy, reach * 0.15, gx, gy, reach * 0.65);
-      grad.addColorStop(0, color + '00');
-      grad.addColorStop(0.3, color + '55');
-      grad.addColorStop(0.6, nextColor + '88');
-      grad.addColorStop(1, nextColor + '11');
+      grad.addColorStop(0, this._colorWithAlpha(color, 0));
+      grad.addColorStop(0.3, this._colorWithAlpha(color, 0.35));
+      grad.addColorStop(0.6, this._colorWithAlpha(nextColor, 0.55));
+      grad.addColorStop(1, this._colorWithAlpha(nextColor, 0.08));
 
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
     }
+  }
 
-    ctx.globalCompositeOperation = 'destination-out';
-    this.buildFlamePath(ctx, innerPts);
-    ctx.globalAlpha = 0.9;
-    ctx.fill();
+  _applyGradientStops(gradient, colors) {
+    const count = colors.length;
+    if (count === 1) {
+      gradient.addColorStop(0, this._colorWithAlpha(colors[0], 0.12));
+      gradient.addColorStop(0.5, this._colorWithAlpha(colors[0], 0.65));
+      gradient.addColorStop(1, this._colorWithAlpha(colors[0], 0.12));
+      return;
+    }
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1);
+      const alpha = 0.2 + 0.65 * Math.sin(t * Math.PI);
+      gradient.addColorStop(t, this._colorWithAlpha(colors[i], alpha));
+    }
+  }
 
-    ctx.restore();
+  _colorWithAlpha(color, alpha) {
+    const clamped = Math.max(0, Math.min(1, alpha));
+    const a = Math.round(clamped * 255).toString(16).padStart(2, '0');
+    return /^#[0-9A-Fa-f]{6}$/.test(color) ? `${color}${a}` : color;
   }
 
   // --- Private: aura band / shape / border ---
@@ -634,7 +695,7 @@ export default class FlameContourRenderer {
 
     for (let idx = 0; idx < this.orbs.length; idx++) {
       const orb = this.orbs[idx];
-      const orbColor = gradColors?.length >= 3
+      const orbColor = gradColors?.length >= 2
         ? gradColors[idx % gradColors.length]
         : fallbackColor;
 

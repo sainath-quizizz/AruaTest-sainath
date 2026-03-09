@@ -1,22 +1,62 @@
 const PORTKEY_API_KEY = '7uuFM238TMkz2A0I+VvMfoZVm9l+';
 const PORTKEY_MODEL = '@vertex-global-region/gemini-3-flash-preview';
 const PORTKEY_URL = 'https://api.portkey.ai/v1/chat/completions';
+const REQUEST_TIMEOUT_MS = 45000;
+const MAX_RESPONSE_TOKENS = 6144;
+const RETRY_RESPONSE_TOKENS = 8192;
+const COMPACT_OUTPUT_RULES = `FINAL OUTPUT RULES:
+- Output compact minified JSON on a single line.
+- No markdown, no commentary, no prose.
+- Keep descriptions short.
+- Keep the JSON complete and closed properly.`;
 
 export async function callLLM(promptText) {
-  const response = await fetch(PORTKEY_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-portkey-api-key': PORTKEY_API_KEY,
-      'x-portkey-provider': 'openai',
-    },
-    body: JSON.stringify({
-      model: PORTKEY_MODEL,
-      max_tokens: 32384,
-      temperature: 0,
-      messages: [{ role: 'user', content: promptText }],
-    }),
-  });
+  const primaryPrompt = `${promptText}\n\n${COMPACT_OUTPUT_RULES}`;
+  let data = await requestLLM(primaryPrompt, MAX_RESPONSE_TOKENS);
+  let content = data.choices?.[0]?.message?.content || '';
+
+  if (isTruncatedResponse(data, content)) {
+    const retryPrompt = `${primaryPrompt}\n- Retry with the shortest valid JSON that still satisfies the schema.\n- Do not pretty-print.`;
+    data = await requestLLM(retryPrompt, RETRY_RESPONSE_TOKENS);
+    content = data.choices?.[0]?.message?.content || '';
+  }
+
+  if (isTruncatedResponse(data, content)) {
+    throw new Error('Aura generation returned incomplete JSON. Please try again.');
+  }
+
+  return content;
+}
+
+async function requestLLM(promptText, maxTokens) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(PORTKEY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-portkey-api-key': PORTKEY_API_KEY,
+        'x-portkey-provider': 'openai',
+      },
+      body: JSON.stringify({
+        model: PORTKEY_MODEL,
+        max_tokens: maxTokens,
+        temperature: 0,
+        reasoning_effort: 'low',
+        messages: [{ role: 'user', content: promptText }],
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Aura generation timed out. Please try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -25,7 +65,13 @@ export async function callLLM(promptText) {
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  return data;
+}
+
+function isTruncatedResponse(data, content) {
+  const finishReason = data.choices?.[0]?.finish_reason;
+  const trimmed = content.trim();
+  return finishReason === 'length' || !trimmed || !trimmed.endsWith('}');
 }
 
 /**
@@ -154,6 +200,12 @@ export const PROMPT_LAYER_OUTERSHAPE = `=== OUTER SHAPE (FLAME CONTOUR) LAYER SP
 
 You generate the FLAME CONTOUR layer for a Canvas 2D aura engine. Output valid JSON only. No markdown, no backticks, no commentary.
 
+Before writing JSON, silently reason through this palette decision process:
+1. Classify the prompt mood and theme family
+2. Choose a palette strategy: analogous, split-complementary, complementary, triadic, or warm-to-hot / cool-to-icy
+3. Pick 2-6 hues that feel intentional for that prompt
+4. Then output only the final JSON
+
 The flame contour is a dynamic jagged silhouette rendered around a character — like Dragon Ball Z Super Saiyan aura or Jujutsu Kaisen cursed energy. It consists of:
 1. An elliptical flame shape with jagged spikes that animate upward
 2. A glowing band between outer and inner borders
@@ -164,7 +216,8 @@ Output schema:
 {
   "baseColor": "#hex",
   "tipColor": "#hex",
-  "gradientColors": ["#hex", "#hex", ...] | null,
+  "gradientColors": ["#hex", "#hex", ...],
+  "gradientMode": "radial" | "linear" | "angular",
   "speed": 0.5-2.0,
   "jaggedness": 0.1-1.0,
   "smoothness": 0.0-1.0,
@@ -180,7 +233,12 @@ Output schema:
 Parameter guide:
 - baseColor: The primary flame body color (dominant hue of the aura)
 - tipColor: The flame tips / bright edge color (usually lighter or hotter version)
-- gradientColors: Optional array of 3-6 hex colors for multi-color animated gradient fill inside the aura body. The engine auto-generates a harmonious gradient from baseColor/tipColor by default, so only provide this to OVERRIDE with custom colors for explicitly multi-hue themes (rainbow, aurora, prismatic, holographic, etc.). Use saturated, flowing color sequences. Examples: rainbow=["#FF0000","#FF8800","#FFFF00","#00FF66","#0088FF","#AA00FF"], aurora=["#00FF88","#00BBFF","#AA55FF","#FF55AA"]. Omit or set null to let the engine auto-derive.
+- gradientColors: Array of 2-6 hex colors for animated gradient fill inside the aura body. IMPORTANT: always use at least 2 distinct hues. Never return a mono-color array and never collapse to one hue family only. Even when the prompt is nominally single-color, choose nearby sibling hues or tasteful neighboring hues so the body still feels dimensional.
+- gradientMode: Gradient composition style. Use:
+  - "radial" for luminous energetic/powerful auras (default preference)
+  - "linear" for calm/divine/wind/healing/sakura/ice themes
+  - "angular" for electric/shock/chaotic prismatic effects
+  - null to let engine auto-pick
 - speed: Animation speed of the flame oscillation (0.5=slow ethereal, 2.0=aggressive rapid)
 - jaggedness: How spiky/sharp the flame contour is (0.1=nearly smooth, 1.0=very sharp jagged spikes). This controls alternating spike amplitude on the contour points.
 - smoothness: Path interpolation style (0.0=sharp jagged lineTo spikes, 0.5=mixed sharp/smooth, 1.0=fully smooth quadratic curves). Controls visual sharpness of the rendered path.
@@ -200,8 +258,9 @@ Theme mapping rules:
 - Energy / power / super saiyan / aura / ki: jaggedness 0.6-0.8, smoothness 0.2-0.4, height 1.0-1.3, speed 1.0-1.5, thickness 0.6-0.8, overlay "none"
 - Electric / lightning / shock / thunder: jaggedness 0.8-1.0, smoothness 0.0-0.15, height 1.0-1.2, speed 1.3-2.0, overlay "bolts"
 - Wind / nature / calm / healing: jaggedness 0.2-0.4, smoothness 0.6-0.9, height 0.6-0.9, speed 0.5-0.8, overlay "streaks"
+- Wind / nature / calm / healing: jaggedness 0.2-0.4, smoothness 0.6-0.9, height 0.6-0.9, speed 0.5-0.8, overlay "streaks", gradientMode "linear"
 - Cosmic / void / dark / shadow: jaggedness 0.7-0.9, smoothness 0.1-0.2, height 1.2-1.5, dualLayer=true, dualColor=dark, overlay "none"
-- Ice / frost / water: jaggedness 0.3-0.5, smoothness 0.5-0.7, height 0.8-1.0, speed 0.5-0.8, overlay "streaks"
+- Ice / frost / water: jaggedness 0.3-0.5, smoothness 0.5-0.7, height 0.8-1.0, speed 0.5-0.8, overlay "streaks", gradientMode "linear"
 - Cute / sakura / soft / gentle: jaggedness 0.2-0.35, smoothness 0.7-1.0, height 0.5-0.8, speed 0.4-0.7, overlay "none"
 
 Color rules — match the theme:
@@ -215,32 +274,44 @@ Color rules — match the theme:
 - dark / shadow: baseColor "#6D28D9", tipColor "#A855F7"
 
 gradientColors rules:
-- The engine auto-generates a beautiful harmonious gradient from baseColor/tipColor for EVERY aura
-- Only provide gradientColors to OVERRIDE with a custom multi-hue palette for explicitly multi-color prompts (rainbow, aurora, prismatic, holographic, iridescent, "fire ice", "sunset ocean")
-- When overriding, use 3-6 saturated colors that flow naturally into each other
-- For all other prompts, omit or set null — the auto-derived gradient is already visually rich
+- Always return gradientColors with 2-6 colors
+- Never return gradientColors as a single-color array
+- Never use only one hue repeated with different brightness
+- For mono-themed prompts, expand into nearby hues inside the same family:
+  - fire/gold -> red, orange, amber, yellow
+  - ice/water -> cyan, sky blue, icy blue, pale aqua
+  - sakura/pink -> rose, pink, peach, soft magenta
+  - dark/cosmic -> violet, indigo, magenta, deep blue
+- When the prompt suggests richer contrast, use tasteful complementary or split-complementary accents
+- Ensure harmony first; use clashing palettes only if the prompt explicitly asks for chaotic/rainbow/prismatic energy
+
+CRITICAL GRADIENT DIRECTIVE:
+- Prioritize non-monochrome aura bodies.
+- ALWAYS return at least 2 distinct hues in gradientColors.
+- Treat palette choice as an intentional design decision, not an afterthought.
+- Choose gradientMode deliberately: mostly "radial" across energy auras, sometimes "linear" for calm/divine/wind/ice, and "angular" for electric/chaotic.
 
 Safety: If NSFW/harmful content detected, output a safe neutral shape:
-{"baseColor":"#60A5FA","tipColor":"#E0F8FF","speed":0.8,"jaggedness":0.4,"smoothness":0.6,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9}
+{"baseColor":"#60A5FA","tipColor":"#E0F8FF","gradientColors":["#60A5FA","#93C5FD","#E0F2FE"],"gradientMode":"linear","speed":0.8,"jaggedness":0.4,"smoothness":0.6,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9}
 
 Return only the JSON object.`;
 
 const PROMPT_EXAMPLES = `=== FULL EXAMPLES ===
 
 User: "fire"
-{"name":"Inferno","description":"Blazing flames and hot embers","nature":"aggressive","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FF4500","tipColor":"#FFD700","speed":1.2,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.1,"contourStyle":"flame","overlay":"none"},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
+{"name":"Inferno","description":"Blazing flames and hot embers","nature":"aggressive","glowColor":"#ff5500","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FF4500","tipColor":"#FFD700","gradientColors":["#FF3B00","#FF7A00","#FFD000"],"gradientMode":"radial","speed":1.2,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.1,"contourStyle":"flame","overlay":"none"},"entities":[{"weight":2,"size":[20,35],"speed":{"vx":[-0.5,0.5],"vy":[-3.5,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#ff4400"},{"type":"ellipse","cx":0,"cy":-0.05,"rx":0.22,"ry":0.38,"fill":"#ff6600"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.12,"ry":0.22,"fill":"#ffaa00"}]},{"weight":1,"size":[18,26],"speed":{"vx":[-0.8,0.8],"vy":[-2.5,-1]},"style":"smoke","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.35,"fill":"#ff3300"},{"type":"circle","cx":0,"cy":0,"r":0.2,"fill":"#ff8800"},{"type":"circle","cx":0,"cy":0,"r":0.1,"fill":"#ffcc00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1.5,1.5],"vy":[-2,0]},"style":"glow","movement":"wander","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#ff6600"},{"type":"circle","cx":0,"cy":0,"r":0.15,"fill":"#ffaa00"},{"type":"circle","cx":0,"cy":0,"r":0.08,"fill":"#ffdd44"}]}]}
 
 User: "super saiyan"
-{"name":"Super Saiyan","description":"Golden flames and electric sparks","nature":"aggressive","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FFD700","tipColor":"#FFFFFF","speed":1.5,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.3,"overlay":"none"},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
+{"name":"Super Saiyan","description":"Golden flames and electric sparks","nature":"aggressive","glowColor":"#FFD700","density":180,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#FFD700","tipColor":"#FFFFFF","gradientColors":["#FFD700","#FFF36B","#FFC247"],"gradientMode":"radial","speed":1.5,"jaggedness":0.7,"smoothness":0.25,"height":1.2,"thickness":0.7,"dualLayer":false,"intensity":1.3,"overlay":"none"},"entities":[{"weight":2,"size":[18,25],"speed":{"vx":[-0.5,0.5],"vy":[-3,-1.5]},"style":"smoke","movement":"rise","shapes":[{"type":"ellipse","cx":0,"cy":0.1,"rx":0.3,"ry":0.45,"fill":"#FFD700"},{"type":"ellipse","cx":0,"cy":-0.1,"rx":0.2,"ry":0.35,"fill":"#FFA500"},{"type":"ellipse","cx":0,"cy":-0.2,"rx":0.1,"ry":0.2,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-1,1],"vy":[-2,-0.5]},"style":"glow","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFD700"},{"type":"circle","cx":0,"cy":0,"r":0.25,"fill":"#FFA500"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#FFCC00"}]},{"weight":1,"size":[18,24],"speed":{"vx":[-2,2],"vy":[-2,1]},"style":"solid","movement":"zigzag","shapes":[{"type":"line","x1":-0.3,"y1":0.2,"x2":0,"y2":-0.1,"stroke":"#FFFF00","width":0.06},{"type":"line","x1":0,"y1":-0.1,"x2":0.2,"y2":0.15,"stroke":"#FFD700","width":0.06},{"type":"line","x1":0.2,"y1":0.15,"x2":0.4,"y2":-0.2,"stroke":"#FFA500","width":0.04}]}]}
 
 User: "mystic fog"
-{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","nature":"calm","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"baseColor":"#6b7280","tipColor":"#d1d5db","speed":0.6,"jaggedness":0.25,"smoothness":0.8,"height":0.7,"thickness":0.6,"dualLayer":false,"intensity":0.7,"overlay":"streaks"},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
+{"name":"Mystic Smoke","description":"Rising ethereal smoke wisps","nature":"calm","glowColor":"#9ca3af","density":70,"background":"clear","renderMode":"fluid","outerShape":{"baseColor":"#6b7280","tipColor":"#d1d5db","gradientColors":["#6B7280","#94A3B8","#D1D5DB"],"gradientMode":"linear","speed":0.6,"jaggedness":0.25,"smoothness":0.8,"height":0.7,"thickness":0.6,"dualLayer":false,"intensity":0.7,"overlay":"streaks"},"entities":[{"weight":1,"size":[20,35],"speed":{"vx":[-0.15,0.15],"vy":[-1.8,-0.6]},"style":"smoke","movement":{"gravity":-0.01,"wave":{"axis":"x","amp":1,"freq":0.5},"friction":0.99},"shapes":[{"type":"circle","cx":0,"cy":0,"r":0.5,"fill":"#6b7280"}]}]}
 
 User: "floating cat faces"
-{"name":"Neko Parade","description":"Cute floating cat face particles","nature":"calm","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"baseColor":"#f9a8d4","tipColor":"#fecdd3","speed":0.5,"jaggedness":0.2,"smoothness":0.9,"height":0.6,"thickness":0.5,"dualLayer":false,"intensity":0.7,"overlay":"none"},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
+{"name":"Neko Parade","description":"Cute floating cat face particles","nature":"calm","glowColor":"#f9a8d4","density":50,"background":"clear","renderMode":"discrete","outerShape":{"baseColor":"#f9a8d4","tipColor":"#fecdd3","gradientColors":["#F9A8D4","#FDB4E0","#FECDD3"],"gradientMode":"linear","speed":0.5,"jaggedness":0.2,"smoothness":0.9,"height":0.6,"thickness":0.5,"dualLayer":false,"intensity":0.7,"overlay":"none"},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0,"r":0.4,"fill":"#FFA07A"},{"type":"triangle","points":[-0.35,-0.25,-0.2,-0.45,-0.05,-0.25],"fill":"#FFA07A"},{"type":"triangle","points":[0.05,-0.25,0.2,-0.45,0.35,-0.25],"fill":"#FFA07A"},{"type":"circle","cx":-0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"circle","cx":0.15,"cy":-0.05,"r":0.06,"fill":"#333"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.05,"ry":0.03,"fill":"#FF69B4"}]}]}
 
 User: "pokemon aura"
-{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","nature":"calm","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#EF4444","tipColor":"#FBBF24","speed":0.8,"jaggedness":0.5,"smoothness":0.4,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9,"overlay":"none"},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
+{"name":"Pokemon Aura","description":"Floating Pokeball and Pikachu particles","nature":"calm","glowColor":"#EF4444","density":60,"background":"dark-fade","renderMode":"discrete","outerShape":{"baseColor":"#EF4444","tipColor":"#FBBF24","gradientColors":["#EF4444","#F97316","#FBBF24"],"gradientMode":"radial","speed":0.8,"jaggedness":0.5,"smoothness":0.4,"height":0.9,"thickness":0.6,"dualLayer":false,"intensity":0.9,"overlay":"none"},"entities":[{"weight":1,"size":[26,34],"speed":{"vx":[-0.7,0.7],"vy":[-2,-0.5]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.4,"fill":"#fff"},{"type":"rect","x":-0.4,"y":-0.4,"w":0.8,"h":0.43,"fill":"#EF4444"},{"type":"rect","x":-0.4,"y":-0.03,"w":0.8,"h":0.06,"fill":"#1a1a1a"},{"type":"circle","cx":0,"cy":0,"r":0.12,"fill":"#fff","stroke":"#1a1a1a","strokeWidth":0.04}]},{"weight":1,"size":[26,34],"speed":{"vx":[-0.6,0.6],"vy":[-1.8,-0.4]},"style":"solid","movement":"float","shapes":[{"type":"circle","cx":0,"cy":0.05,"r":0.38,"fill":"#FBBF24"},{"type":"circle","cx":-0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"circle","cx":0.12,"cy":-0.05,"r":0.05,"fill":"#1a1a1a"},{"type":"ellipse","cx":0,"cy":0.1,"rx":0.08,"ry":0.04,"fill":"#1a1a1a"},{"type":"circle","cx":-0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"circle","cx":0.2,"cy":0.08,"r":0.08,"fill":"#EF4444"},{"type":"triangle","points":[-0.2,-0.35,-0.35,-0.15,-0.05,-0.25],"fill":"#FBBF24"},{"type":"triangle","points":[0.2,-0.35,0.35,-0.15,0.05,-0.25],"fill":"#FBBF24"}]}]}`;
 
 const PROMPT_TASK_INSTRUCTIONS = `=== TASK INSTRUCTIONS ===
 
@@ -253,6 +324,11 @@ How to interpret the request:
 Critical rules:
 1. NEVER add generic glow orbs, smoke puffs, or abstract accent particles alongside character/shape particles. If the user asks for "bomb", every particle must be a bomb. If they ask for "creeper aura", every particle must be a creeper face. No filler entities.
 2. For effect auras: every entity must stay on-theme. No white smoke, no gray puffs, no colorless filler. If user says "fire", ALL entities must be warm-colored (red, orange, yellow, amber). If user says "ice", ALL entities must be cool-colored (blue, cyan, white). Every entity must visually reinforce the same theme.
+3. outerShape.gradientColors must always contain 2 or more intentional hues. First decide the palette strategy from the prompt:
+   - analogous for elegant mono-family prompts
+   - complementary or split-complementary when the prompt suggests contrast
+   - triadic/prismatic only for magical, rainbow, aurora, holographic, chaotic prompts
+   Even "single-color" prompts must expand into nearby related hues rather than staying flat.
 
 Constraints:
 - vy is usually negative (upward). Positive vy only for rain/bounce/falling.
@@ -286,8 +362,6 @@ ${glowPrompt}
 ${particlePrompt}
 
 ${outerShapePrompt}
-
-${PROMPT_EXAMPLES}
 
 ${PROMPT_TASK_INSTRUCTIONS}
 

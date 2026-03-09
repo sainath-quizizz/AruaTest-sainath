@@ -41,21 +41,41 @@ function hslToHex(h, s, l) {
   return `#${toHex(hue2rgb(p, q, h + 1/3))}${toHex(hue2rgb(p, q, h))}${toHex(hue2rgb(p, q, h - 1/3))}`;
 }
 
+const clamp01 = (value) => Math.max(0, Math.min(1, value));
+
+function hueDistance(a, b) {
+  const diff = Math.abs((((a - b) % 1) + 1) % 1);
+  return Math.min(diff, 1 - diff);
+}
+
 /**
  * Generate a harmonious 4-color gradient palette from base and tip colors.
- * Uses analogous + complementary hue shifts with varied saturation/lightness.
+ * Even single-hue themes get nearby hue variation so the aura body never feels flat.
  */
 export function deriveGradientColors(baseHex, tipHex) {
   const base = hexToRgb(baseHex);
   const tip = hexToRgb(tipHex);
   const [bH, bS, bL] = rgbToHsl(base.r, base.g, base.b);
   const [tH, tS, tL] = rgbToHsl(tip.r, tip.g, tip.b);
+  const sharedHue = hueDistance(bH, tH) < 0.05;
+  const warm = bH < 0.15 || bH > 0.9 || (bH > 0.08 && bH < 0.2);
+
+  const analogousLead = sharedHue
+    ? (warm ? bH + 0.06 : bH - 0.06)
+    : bH + 0.04;
+  const analogousTrail = sharedHue
+    ? (warm ? tH - 0.05 : tH + 0.05)
+    : tH - 0.04;
+  const accentHue = sharedHue
+    ? (warm ? bH + 0.12 : bH - 0.12)
+    : (bH + tH) / 2;
 
   return [
+    hslToHex(analogousLead, clamp01(Math.max(0.58, bS * 1.04)), clamp01(Math.min(0.62, bL + 0.02))),
     baseHex,
-    hslToHex(bH + 0.08, Math.min(1, bS * 1.1), Math.min(0.7, bL + 0.1)),
+    hslToHex(accentHue, clamp01(Math.max(0.6, (bS + tS) * 0.55)), clamp01(Math.min(0.72, (bL + tL) * 0.5 + 0.08))),
     tipHex,
-    hslToHex(tH - 0.08, Math.min(1, tS * 1.05), Math.min(0.75, tL + 0.05)),
+    hslToHex(analogousTrail, clamp01(Math.max(0.52, tS * 0.92)), clamp01(Math.min(0.82, tL + 0.04))),
   ];
 }
 
